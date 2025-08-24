@@ -1,0 +1,34 @@
+PLAYLIST="$PWD/playlist.m3u"
+TMPDIR=/tmp/WebRip19
+YTDLP_ARGS=( --extractor-args "youtube:player-client=tv_embedded" \
+    --cookies "$PWD/www.youtube.com_cookies.txt" \
+    --abort-on-unavailable-fragments \
+    --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0" \
+    -S vcodec:h264 )
+MPLAYER_VIDEO_ARGS=( -vf scale=1280:720 )
+SVTENC_ARGS=( --crf 38 --enable-variance-boost 1 --tune 2 --preset 0 )
+OPUSENC_ARGS=( --bitrate 64 )
+MKVPROPEDIT_ARGS=( --edit track:a1 --set language=ukr )
+BYPASS_VAPOURSYNTH=1
+
+VAPOUR_SYNTH_TPL='import vapoursynth as vs
+import havsfunc as haf
+
+core = vs.core
+clip = core.ffms2.Source(source='\''input_stream'\'')
+clip = haf.QTGMC(clip, Preset='\''Slower'\'', FPSDivisor=2, TFF=False)
+clip = core.resize.Spline36(clip, 1280, 720)
+clip.set_output()'
+
+ENCODER_TAG='<Tags>
+  <Tag>
+    <Simple>
+      <Name>ENCODER</Name>
+      <String>%%ENCODER_VERSION%%</String>
+    </Simple>
+    <Simple>
+      <Name>ENCODER_OPTIONS</Name>
+      <String>%%ENCODER_OPTIONS%%</String>
+    </Simple>
+  </Tag>
+</Tags>'
