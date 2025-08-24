@@ -178,7 +178,7 @@ do
     # Move resulting file and cleanup
     prefix=$(printf "%03d\n" $NUMBER)
     mv tmp.mkv "$OUT_DIR/$prefix# ${input_files[0]}"
-    rm -f *.mkv *.vpy *.xml *.ivf *.opus *.jpg *.png *.avif *.ffindex
+    rm -f *.mkv *.vpy *.xml *.ivf *.opus *.webp *.jpg *.png *.avif *.ffindex
 
     NUMBER=$((NUMBER + 1))
 done < "$PLAYLIST"
