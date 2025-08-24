@@ -144,7 +144,7 @@ do
         if [[ $(file -brL --mime-type "${thumbnail_files[0]}") != "image/avif" ]]
         then
             magick "${thumbnail_files[0]}" cover.png
-            avifenc -q 51 -c svt -s 0 -j 4 -d 8 -y 420 -a avif=1 -a tune=0 \
+            avifenc -q 71 -c svt -s 0 -j 4 -d 8 -y 420 -a avif=1 -a tune=0 \
                 cover.png cover.avif
         elif [[ "${thumbnail_files[0]}" != cover.avif ]]
         then
