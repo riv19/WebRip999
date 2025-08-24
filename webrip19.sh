@@ -60,18 +60,19 @@ ENCODER_TAG='
 
 # --- PREREQUISITES BEGIN
 
-which wget >/dev/null 2>&1 || halt "Please install wget"
-which yt-dlp >/dev/null 2>&1 || halt "Please install yt-dlp"
-which avifenc >/dev/null 2>&1 || halt "Please install libavif"
-which SvtAv1EncApp >/dev/null 2>&1 || halt "Please install svt-av1"
-which opusenc >/dev/null 2>&1 || halt "Please install opus-tools"
-which mkvmerge >/dev/null 2>&1 || halt "Please install mkvtoolnix"
-which mkvpropedit >/dev/null 2>&1 || halt "Please install mkvtoolnix"
-which mplayer >/dev/null 2>&1 || halt "Please install mplayer"
-which magick >/dev/null 2>&1 || halt "Please install imagemagick"
+which file >/dev/null 2>&1 || halt "Please install \"file\""
+which jq >/dev/null 2>&1 || halt "Please install \"jq\""
+which yt-dlp >/dev/null 2>&1 || halt "Please install \"yt-dlp\""
+which avifenc >/dev/null 2>&1 || halt "Please install \"libavif\""
+which SvtAv1EncApp >/dev/null 2>&1 || halt "Please install \"svt-av1\""
+which opusenc >/dev/null 2>&1 || halt "Please install \"opus-tools\""
+which mkvmerge >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
+which mkvpropedit >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
+which mplayer >/dev/null 2>&1 || halt "Please install \"mplayer\""
+which magick >/dev/null 2>&1 || halt "Please install \"imagemagick\""
 if [[ "$BYPASS_VAPOURSYNTH" != 1 ]]
 then
-    which vspipe >/dev/null 2>&1 || halt "Please install vapoursynth"
+    which vspipe >/dev/null 2>&1 || halt "Please install \"vapoursynth\""
 fi
 
 # --- PREREQUISITES END
@@ -98,25 +99,35 @@ NUMBER=0
 
 while IFS="" read -r line || [ -n "$line" ]
 do
-    # Download the video file, converting to Matroska
+    # Get the source file and extract thumbnail/cover
     if [[ "$line" == https://* || "$line" == http://* ]]
     then
         yt-dlp --write-thumbnail --abort-on-unavailable-fragments \
             -t mkv "${YTDLP_ARGS[@]}" "$line"
+        input_files=( *.mkv )
+        thumbnail_files=( *.webp )
     elif [[ "$line" == file://* ]]
     then
-        yt-dlp --enable-file-urls --write-thumbnail \
-            -o "%(title)s.%(ext)s" \
-            -t mkv "${YTDLP_ARGS[@]}" "$line"
+        path="${line:7}"
+        filename="$(basename "$path")"
+        ln -s "$path" "$filename"
+        input_files=( "$filename" )
+        if [[ $(file -brL --mime-type "$filename") == "video/x-matroska" ]]
+        then
+            json=$(mkvmerge "$filename" -J | \
+                jq '.attachments | map(select(.file_name | startswith("cover")))')
+            id=$(echo "$json" | jq -r .[0].id)
+            file_name=$(echo "$json" | jq -r .[0].file_name)
+            mkvextract attachments "$filename" "$id":"$file_name"
+            thumbnail_files=( "$file_name" )
+        fi
     else
         continue
     fi
 
-    mkvfiles=( *.mkv )
-    webpfiles=( *.webp )
-
     # Make a VapourSynth script
-    echo "$VAPOUR_SYNTH_TPL" | sed "s/%%INPUT_FILE%%/${mkvfiles[0]}/" > tmp.vpy
+    echo "$VAPOUR_SYNTH_TPL" | \
+        sed "s/%%INPUT_FILE%%/${input_files[0]}/" > tmp.vpy
 
     # Make a XML tags file with encoder options for the video track
     svtav1_ver="$(SvtAv1EncApp --version)"
@@ -128,7 +139,7 @@ do
     # Process video
     if [[ $BYPASS_VAPOURSYNTH == "1" ]]
     then
-        mplayer "${mkvfiles[0]}" -noconsolecontrols -really-quiet \
+        mplayer "${input_files[0]}" -noconsolecontrols -really-quiet \
             "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
             SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
     else
@@ -137,7 +148,7 @@ do
     fi
 
     # Process audio
-    mplayer "${mkvfiles[0]}" -noconsolecontrols -really-quiet -vo null \
+    mplayer "${input_files[0]}" -noconsolecontrols -really-quiet -vo null \
         -ao pcm:fast:file=/dev/stdout | \
         opusenc "${OPUSENC_ARGS[@]}" --ignorelength - tmp.opus
 
@@ -145,10 +156,18 @@ do
     mkvmerge -o tmp.mkv tmp.ivf tmp.opus
 
     # Update tags and optionally attach the thumbnail
-    if [[ -f "${webpfiles[0]}" ]]
+    if [[ -f "${thumbnail_files[0]}" ]]
     then
-        magick "${webpfiles[0]}" cover.png
-        avifenc -q 51 -c svt -s 0 -j 4 -d 8 -y 420 -a avif=1 -a tune=0 cover.png cover.avif
+        # Avoid recompression if already in AVIF format
+        if [[ $(file -brL --mime-type "${thumbnail_files[0]}") != "image/avif" ]]
+        then
+            magick "${thumbnail_files[0]}" cover.png
+            avifenc -q 51 -c svt -s 0 -j 4 -d 8 -y 420 -a avif=1 -a tune=0 \
+                cover.png cover.avif
+        elif [[ "${thumbnail_files[0]}" != cover.avif ]]
+        then
+            ln -s "${thumbnail_files[0]}" cover.avif
+        fi
         MKVPROPEDIT_ARGS+=( --add-attachment cover.avif )
     fi
     mkvpropedit tmp.mkv --tags track:v1:video_tag.xml --add-track-statistics-tags \
@@ -156,8 +175,8 @@ do
 
     # Move resulting file and cleanup
     prefix=$(printf "%03d\n" $NUMBER)
-    mv tmp.mkv "$OUT_DIR/$prefix# ${mkvfiles[0]}"
-    rm -f *.mkv *.vpy *.xml *.ivf *.opus *.jpg *.avif *.ffindex
+    mv tmp.mkv "$OUT_DIR/$prefix# ${input_files[0]}"
+    rm -f *.mkv *.vpy *.xml *.ivf *.opus *.jpg *.png *.avif *.ffindex
 
     NUMBER=$((NUMBER + 1))
 done < "$PLAYLIST"
