@@ -36,7 +36,7 @@ import vapoursynth as vs
 import havsfunc as haf
 
 core = vs.core
-clip = core.ffms2.Source(source='\''%%INPUT_FILE%%'\'')
+clip = core.ffms2.Source(source='\''input_stream'\'')
 clip = haf.QTGMC(clip, Preset='\''Slower'\'', FPSDivisor=2, TFF=False)
 clip = core.resize.Spline36(clip, 1280, 720)
 clip.set_output()
@@ -106,6 +106,7 @@ do
             -t mkv "${YTDLP_ARGS[@]}" "$line"
         input_files=( *.mkv )
         thumbnail_files=( *.webp )
+        path="./${input_files[0]}"
     elif [[ "$line" == file://* ]]
     then
         path="${line:7}"
@@ -126,8 +127,8 @@ do
     fi
 
     # Make a VapourSynth script
-    echo "$VAPOUR_SYNTH_TPL" | \
-        sed "s/%%INPUT_FILE%%/${input_files[0]}/" > tmp.vpy
+    ln -sL "$path" input_stream
+    echo "$VAPOUR_SYNTH_TPL" > tmp.vpy
 
     # Make a XML tags file with encoder options for the video track
     svtav1_ver="$(SvtAv1EncApp --version)"
@@ -139,7 +140,7 @@ do
     # Process video
     if [[ $BYPASS_VAPOURSYNTH == "1" ]]
     then
-        mplayer "${input_files[0]}" -noconsolecontrols -really-quiet \
+        mplayer input_stream -noconsolecontrols -really-quiet \
             "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
             SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
     else
@@ -148,7 +149,7 @@ do
     fi
 
     # Process audio
-    mplayer "${input_files[0]}" -noconsolecontrols -really-quiet -vo null \
+    mplayer input_stream -noconsolecontrols -really-quiet -vo null \
         -ao pcm:fast:file=/dev/stdout | \
         opusenc "${OPUSENC_ARGS[@]}" --ignorelength - tmp.opus
 
