@@ -137,26 +137,7 @@ do
         | sed "s/%%ENCODER_VERSION%%/$svtav1_ver/" \
         | sed "s/%%ENCODER_OPTIONS%%/$svtav1_args/" > video_tag.xml
 
-    # Process video
-    if [[ $BYPASS_VAPOURSYNTH == "1" ]]
-    then
-        mplayer input_stream -noconsolecontrols -really-quiet \
-            "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
-            SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
-    else
-        vspipe -c y4m tmp.vpy - | \
-            SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
-    fi
-
-    # Process audio
-    mplayer input_stream -noconsolecontrols -really-quiet -vo null \
-        -ao pcm:fast:file=/dev/stdout | \
-        opusenc "${OPUSENC_ARGS[@]}" --ignorelength - tmp.opus
-
-    # Merge Matroska
-    mkvmerge -o tmp.mkv tmp.ivf tmp.opus
-
-    # Update tags and optionally attach the thumbnail
+    # Prepare a thumbnail
     if [[ -f "${thumbnail_files[0]}" ]]
     then
         # Avoid recompression if already in AVIF format
@@ -171,6 +152,26 @@ do
         fi
         MKVPROPEDIT_ARGS+=( --add-attachment cover.avif )
     fi
+
+    # Process audio
+    mplayer input_stream -noconsolecontrols -really-quiet -vo null \
+        -ao pcm:fast:file=/dev/stdout | \
+        opusenc "${OPUSENC_ARGS[@]}" --ignorelength - tmp.opus
+
+    # Process video
+    if [[ $BYPASS_VAPOURSYNTH == "1" ]]
+    then
+        mplayer input_stream -noconsolecontrols -really-quiet \
+            "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
+            SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
+    else
+        vspipe -c y4m tmp.vpy - | \
+            SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
+    fi
+
+
+    # Merge Matroska, edit tags, add attachments
+    mkvmerge -o tmp.mkv tmp.ivf tmp.opus
     mkvpropedit tmp.mkv --tags track:v1:video_tag.xml --add-track-statistics-tags \
         "${MKVPROPEDIT_ARGS[@]}"
 
