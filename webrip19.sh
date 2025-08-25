@@ -45,7 +45,7 @@ fi
 
 CURR_DIR="$PWD"
 OUT_DIR="$HOME/Videos/WebRip19"
-mkdir "$TMPDIR"
+mkdir -p "$TMPDIR"
 mkdir -p "$OUT_DIR"
 
 cd "$TMPDIR"
@@ -138,7 +138,7 @@ do
     # Move resulting file and cleanup
     prefix=$(printf "%03d\n" $NUMBER)
     mv tmp.mkv "$OUT_DIR/$prefix# ${input_files[0]}"
-    rm -f *.mkv *.vpy *.xml *.ivf *.opus *.webp *.jpg *.png *.avif *.ffindex
+    rm -f "$TMPDIR/"*
 
     NUMBER=$((NUMBER + 1))
 done < "$PLAYLIST"
