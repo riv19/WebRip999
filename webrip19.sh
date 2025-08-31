@@ -113,6 +113,18 @@ do
         MKVPROPEDIT_ARGS+=( --add-attachment cover.avif )
     fi
 
+    MKVMERGE_ARGS=( )
+
+    # Prepare chapters
+    if [[ $(file -brL --mime-type "${input_files[0]}") == "video/x-matroska" ]]
+    then
+        mkvextract "${input_files[0]}" chapters chapters.xml
+        if [[ -f chapters.xml ]]
+        then
+            MKVMERGE_ARGS+=( --chapters chapters.xml )
+        fi
+    fi
+
     # Process audio
     mplayer input_stream -noconsolecontrols -really-quiet -vo null \
         -ao pcm:fast:file=/dev/stdout | \
@@ -130,7 +142,7 @@ do
     fi
 
     # Merge Matroska, edit tags, add attachments
-    mkvmerge -o tmp.mkv tmp.ivf tmp.opus
+    mkvmerge -o tmp.mkv "${MKVMERGE_ARGS[@]}" tmp.ivf tmp.opus
     mkvpropedit tmp.mkv --tags track:v1:video_tag.xml --add-track-statistics-tags \
         "${MKVPROPEDIT_ARGS[@]}"
 
