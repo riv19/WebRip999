@@ -67,6 +67,7 @@ do
             -t mkv "${YTDLP_ARGS[@]}" "$line"
         input_files=( *.mkv )
         thumbnail_files=( *.png )
+        desc_files=( *.description )
         path="./${input_files[0]}"
     elif [[ "$line" == file://* ]]
     then
@@ -76,12 +77,20 @@ do
         input_files=( "$filename" )
         if [[ $(file -brL --mime-type "$filename") == "video/x-matroska" ]]
         then
+            # Cover/thumbnail
             json=$(mkvmerge "$filename" -J | \
                 jq '.attachments | map(select(.file_name | startswith("cover")))')
             id=$(echo "$json" | jq -r .[0].id)
             file_name=$(echo "$json" | jq -r .[0].file_name)
             mkvextract attachments "$filename" "$id":"$file_name"
             thumbnail_files=( "$file_name" )
+            # Description/annotation
+            json=$(mkvmerge "$filename" -J | \
+                jq '.attachments | map(select(.file_name == "description.txt"))')
+            id=$(echo "$json" | jq -r .[0].id)
+            file_name=$(echo "$json" | jq -r .[0].file_name)
+            mkvextract attachments "$filename" "$id":"$file_name.description"
+            desc_files=( "$file_name.description" )
         fi
     else
         continue
@@ -123,6 +132,13 @@ do
         then
             MKVMERGE_ARGS+=( --chapters chapters.xml )
         fi
+    fi
+
+    # Prepare description (it's not standardized - just add as attachment)
+    if [[ -f "${desc_files[0]}" ]]
+    then
+        mv "${desc_files[0]}" description.txt
+        MKVPROPEDIT_ARGS+=( --add-attachment description.txt )
     fi
 
     # Process audio
