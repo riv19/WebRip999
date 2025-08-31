@@ -30,7 +30,6 @@ which opusenc >/dev/null 2>&1 || halt "Please install \"opus-tools\""
 which mkvmerge >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 which mkvpropedit >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 which mplayer >/dev/null 2>&1 || halt "Please install \"mplayer\""
-which magick >/dev/null 2>&1 || halt "Please install \"imagemagick\""
 if [[ "$BYPASS_VAPOURSYNTH" != 1 ]]
 then
     which vspipe >/dev/null 2>&1 || halt "Please install \"vapoursynth\""
@@ -63,10 +62,11 @@ do
     # Get the source file and extract thumbnail/cover
     if [[ "$line" == https://* || "$line" == http://* ]]
     then
-        yt-dlp --write-thumbnail --abort-on-unavailable-fragments \
+        yt-dlp --write-thumbnail --convert-thumbnails png \
+            --abort-on-unavailable-fragments \
             -t mkv "${YTDLP_ARGS[@]}" "$line"
         input_files=( *.mkv )
-        thumbnail_files=( *.webp )
+        thumbnail_files=( *.png )
         path="./${input_files[0]}"
     elif [[ "$line" == file://* ]]
     then
@@ -104,9 +104,8 @@ do
         # Avoid recompression if already in AVIF format
         if [[ $(file -brL --mime-type "${thumbnail_files[0]}") != "image/avif" ]]
         then
-            magick "${thumbnail_files[0]}" cover.png
             avifenc -q 71 -c svt -s 0 -j 4 -d 8 -y 420 -a avif=1 -a tune=0 \
-                cover.png cover.avif
+                "${thumbnail_files[0]}" cover.avif
         elif [[ "${thumbnail_files[0]}" != cover.avif ]]
         then
             ln -s "${thumbnail_files[0]}" cover.avif
