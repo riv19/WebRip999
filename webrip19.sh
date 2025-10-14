@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
+IFS=$'\n\t'
 
 # See README.md for help.
 
@@ -30,10 +31,10 @@ which opusenc >/dev/null 2>&1 || halt "Please install \"opus-tools\""
 which mkvmerge >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 which mkvpropedit >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 which mplayer >/dev/null 2>&1 || halt "Please install \"mplayer\""
-if [[ "$BYPASS_VAPOURSYNTH" != 1 ]]
-then
-    which vspipe >/dev/null 2>&1 || halt "Please install \"vapoursynth\""
-fi
+[ "$VAPOURSYNTH" -eq 0 ] || which vspipe >/dev/null 2>&1 || \
+    halt "Please install \"vapoursynth\""
+[ "$FFMPEG_NORMALIZE" -eq 0 ] || which ffmpeg-normalize >/dev/null 2>&1 || \
+    halt "Please install \"ffmpeg-normalize\""
 
 # --- PREREQUISITES END
 
@@ -50,27 +51,23 @@ mkdir -p "$OUT_DIR"
 cd "$TMPDIR"
 
 line=$(head -n 1 "$PLAYLIST")
-if [[ "$line" != "#EXTM3U" ]]
-then
-    halt "Missing #EXTM3U file header in playlist"
-fi
+[[ "$line" == "#EXTM3U" ]] || halt "Missing #EXTM3U file header in playlist"
 
-NUMBER=0
+process_one() {
+    add_url=0
+    skip_line=0
 
-while IFS="" read -r line || [ -n "$line" ]
-do
     # Get the source file and extract thumbnail/cover
-    if [[ "$line" == https://* || "$line" == http://* ]]
-    then
+    if [[ "$line" == https://* || "$line" == http://* ]]; then
         yt-dlp --write-thumbnail --convert-thumbnails png \
             --abort-on-unavailable-fragments \
-            -t mkv "${YTDLP_ARGS[@]}" "$line"
+            -t mkv "${YTDLP_ARGS[@]}" "$line" 2>&1
         input_files=( *.mkv )
         thumbnail_files=( *.png )
         desc_files=( *.description )
         path="./${input_files[0]}"
-    elif [[ "$line" == file://* ]]
-    then
+        add_url=1
+    elif [[ "$line" == file://* ]]; then
         path="${line:7}"
         filename="$(basename "$path")"
         ln -s "$path" "$filename"
@@ -93,28 +90,32 @@ do
             desc_files=( "$file_name.description" )
         fi
     else
-        continue
+        skip_line=1
+        return
     fi
 
-    # Make a VapourSynth script
+    # Some tools may fail with Unicode file names.
+    # Make a symbolic link to the input file.
     ln -sL "$path" input_stream
-    echo "$VAPOUR_SYNTH_TPL" > tmp.vpy
+
+    # Make a VapourSynth script
+    if [ "$VAPOURSYNTH" -eq 1 ]; then
+        echo "$VAPOUR_SYNTH_TPL" > tmp.vpy
+    fi
 
     # Make a XML tags file with encoder options for the video track
-    svtav1_ver="$(SvtAv1EncApp --version)"
+    svtav1_ver="$(SvtAv1EncApp --version | head -n1)"
     svtav1_args="${SVTENC_ARGS[@]}"
-    echo "$ENCODER_TAG" \
-        | sed "s/%%ENCODER_VERSION%%/$svtav1_ver/" \
-        | sed "s/%%ENCODER_OPTIONS%%/$svtav1_args/" > video_tag.xml
+    echo "$ENCODER_TAG" | \
+        sed "s/%%ENCODER_VERSION%%/$svtav1_ver/" | \
+        sed "s/%%ENCODER_OPTIONS%%/$svtav1_args/" | tr -s '[:space:]' > video_tag.xml
 
     # Prepare a thumbnail
-    if [[ -f "${thumbnail_files[0]}" ]]
-    then
+    if [[ -f "${thumbnail_files[0]}" ]]; then
         # Avoid recompression if already in AVIF format
         if [[ $(file -brL --mime-type "${thumbnail_files[0]}") != "image/avif" ]]
         then
-            avifenc -q 71 -c svt -s 0 -j 4 -d 8 -y 420 -a avif=1 -a tune=0 \
-                "${thumbnail_files[0]}" cover.avif
+            avifenc "${AVIFENC_ARGS[@]}" "${thumbnail_files[0]}" cover.avif
         elif [[ "${thumbnail_files[0]}" != cover.avif ]]
         then
             ln -s "${thumbnail_files[0]}" cover.avif
@@ -125,9 +126,9 @@ do
     MKVMERGE_ARGS=( )
 
     # Prepare chapters
-    if [[ $(file -brL --mime-type "${input_files[0]}") == "video/x-matroska" ]]
+    if [[ $(file -brL --mime-type input_stream) == "video/x-matroska" ]]
     then
-        mkvextract "${input_files[0]}" chapters chapters.xml
+        mkvextract input_stream chapters chapters.xml
         if [[ -f chapters.xml ]]
         then
             MKVMERGE_ARGS+=( --chapters chapters.xml )
@@ -135,32 +136,65 @@ do
     fi
 
     # Prepare description (it's not standardized - just add as attachment)
-    if [[ -f "${desc_files[0]}" ]]
-    then
+    if [[ -f "${desc_files[0]}" ]]; then
         mv "${desc_files[0]}" description.txt
+        echo -e "\n\nProcessed with WebRip19: $SCRIPT_URL" >> description.txt
+        [ $add_url -eq 0 ] || echo "Original Video: $line" >> description.txt
         MKVPROPEDIT_ARGS+=( --add-attachment description.txt )
     fi
 
-    # Process audio
-    mplayer input_stream -noconsolecontrols -really-quiet -vo null \
-        -ao pcm:fast:file=/dev/stdout | \
-        opusenc "${OPUSENC_ARGS[@]}" --ignorelength - tmp.opus
+    # Process audio.
+    # Mplayer has volnorm filer, but it has low quality (noticeable).
+    # FFMpeg-normalize is far better, running in two passes.
+    if [ $FFMPEG_NORMALIZE -eq 1 ]; then
+        NO_COLOR=1 ffmpeg-normalize input_stream -v \
+            "${FFMPEG_NORMALIZE_ARGS[@]}" -vn -ar 48000 -ext wav -o norm.wav
+        opusenc "${OPUSENC_ARGS[@]}" --ignorelength norm.wav tmp.opus
+        rm norm.wav
+    else
+        mplayer input_stream -noconsolecontrols -really-quiet -vo null \
+            -ao pcm:fast:file=/dev/stdout -af format=s16le | \
+            opusenc "${OPUSENC_ARGS[@]}" --ignorelength - tmp.opus
+    fi
 
     # Process video
-    if [[ $BYPASS_VAPOURSYNTH == "1" ]]
-    then
-        mplayer input_stream -noconsolecontrols -really-quiet \
-            "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
+    # Vapoursynth may be used for its video filters, such as QTGMC
+    if [ $VAPOURSYNTH -eq 1 ]; then
+        vspipe -c y4m tmp.vpy - | \
             SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
     else
-        vspipe -c y4m tmp.vpy - | \
+        mplayer input_stream -noconsolecontrols -really-quiet \
+            "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
             SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
     fi
 
     # Merge Matroska, edit tags, add attachments
     mkvmerge -o tmp.mkv "${MKVMERGE_ARGS[@]}" tmp.ivf tmp.opus
+}
+
+NUMBER=0
+while [ 1 ]
+do
+    prefix=$(printf "%03d\n" $NUMBER)
+    if ls "$OUT_DIR/$prefix# "* >/dev/null 2>&1
+    then
+        NUMBER=$((NUMBER + 1))
+        continue
+    fi
+    break
+done
+
+while IFS="" read -r line || [ -n "$line" ]
+do
+    # Process one item, logging console output
+    process_one > >(tee -a "$LOG_FILE") 2> >(tee -a "$LOG_FILE" >&2)
+    [ "$skip_line" -eq 0 ] || continue
+
+    # Process progress bars in the log
+    sed -i 's/.*\r//;:a;s/.\x08//;ta;s/\x08//' "$LOG_FILE"
+
     mkvpropedit tmp.mkv --tags track:v1:video_tag.xml --add-track-statistics-tags \
-        "${MKVPROPEDIT_ARGS[@]}"
+        "${MKVPROPEDIT_ARGS[@]}" --add-attachment "$LOG_FILE"
 
     # Move resulting file and cleanup
     prefix=$(printf "%03d\n" $NUMBER)
