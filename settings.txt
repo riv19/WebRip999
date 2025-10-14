@@ -1,24 +1,89 @@
+# Reference versions:
+#
+# SVT-AV1-PSY v3.0.2-2-g3745419c (release)
+# opus-tools 0.2
+# avifenc 1.3.0
+# yt-dlp 2025.08.27
+# MPlayer SVN-r38542
+# vspipe Core R72
+# ffmpeg-normalize v1.33.1
+# mkvmerge v94.0
+
 PLAYLIST="$PWD/playlist.m3u"
-TMPDIR=/tmp/WebRip19
-YTDLP_ARGS=( --extractor-args "youtube:player-client=tv_embedded" \
+TMPDIR=~/.WebRip19
+YTDLP_ARGS_0=( --extractor-args "youtube:player-client=tv_embedded" \
     --cookies "$PWD/www.youtube.com_cookies.txt" \
     --abort-on-unavailable-fragments \
+    --write-subs --sub-format srt --sub-langs "en,uk,ru" \
+    --embed-chapters --write-info-json --write-description  \
     --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0" \
     -S vcodec:h264 )
-MPLAYER_VIDEO_ARGS=( -vf scale=1280:720 )
-SVTENC_ARGS=( --crf 38 --enable-variance-boost 1 --tune 2 --preset 0 )
-OPUSENC_ARGS=( --bitrate 64 )
+YTDLP_ARGS_1=( --extractor-args "youtube:player_client=default,ios;formats=missing_pot" \
+    -S "tbr" -f "bv*+ba*[acodec=opus]" \
+    --abort-on-unavailable-fragments \
+    --write-subs --sub-format srt --sub-langs "en,uk,ru" \
+    --embed-chapters --write-info-json --write-description  \
+    --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0")
+YTDLP_ARGS=( "${YTDLP_ARGS_1[@]}" ) # Choose the template from above
+MPLAYER_VIDEO_ARGS1=( -vf scale=1280:720 )
+MPLAYER_VIDEO_ARGS2=( -vf eq=-5:-5 )
+MPLAYER_VIDEO_ARGS=( "${MPLAYER_VIDEO_ARGS1[@]}" ) # Choose the template from above
+# Encode in yuv420p10 - use advantages of the modern codec, to produce much less banding and blocking.
+SVTENC_ARGS=( --crf 43 --enable-variance-boost 1 --variance-boost-strength 3 \
+    --variance-boost-curve 1 --enable-dlf 2 --enable-overlays 1 --qm-min 8 --chroma-qm-min 8 \
+    --noise-norm-strength 3 --tune 3 --psy-rd 1 --spy-rd 1 --preset 0 --input-depth 10 )
+# Svt is crashing for me in avif mode.
+# AOM's tune=iq equals to svt-psy tune=4 (Still Picture)
+AVIFENC_ARGS=( -q 51 -c aom -s 0 -j 4 -d 8 -y 420 -a tune=iq )
+FFMPEG_NORMALIZE_ARGS=( -t -15 )
+OPUSENC_ARGS=( --bitrate 80 )
 MKVPROPEDIT_ARGS=( --edit track:a1 --set language=ukr )
-BYPASS_VAPOURSYNTH=1
+LOG_FILE=webrip19.log
+VAPOURSYNTH=1
+FFMPEG_NORMALIZE=1
+SCRIPT_URL="https://github.com/riv19/WebRip19"
 
-VAPOUR_SYNTH_TPL='import vapoursynth as vs
-import havsfunc as haf
+# Simple template for high-quality video.
+VAPOUR_SYNTH_TPL1='import vapoursynth as vs
 
 core = vs.core
-clip = core.ffms2.Source(source='\''input_stream'\'')
-clip = haf.QTGMC(clip, Preset='\''Slower'\'', FPSDivisor=2, TFF=False)
+core.num_threads = 2
+clip = core.bs.VideoSource(source='\''input_stream'\'')
+clip = core.resize.Spline36(clip, 1280, 720, format=vs.YUV420P10, matrix=1)
+clip.set_output()'
+
+# Repair badly deinterlaced content, do deband and deblock.
+# Fix brightness/contrast by using Tweak filter port from AviSynth.
+VAPOUR_SYNTH_TPL2='import vapoursynth as vs
+import adjust as adj
+from vsdeinterlace import qtgmc
+
+core = vs.core
+core.num_threads = 2
+clip = core.bs.VideoSource(source='\''input_stream'\'')
+clip = (
+    qtgmc.QTempGaussMC(clip, input_type=qtgmc.QTempGaussMC.InputType.PROGRESSIVE)
+    .prefilter()
+    .analyze(blksize=8)
+    .denoise()
+    .basic()
+    .source_match()
+    .lossless()
+    .sharpen()
+    .back_blend()
+    .sharpen_limit()
+    .final()
+    .motion_blur()
+    .deinterlace()
+)
+clip = core.resize.Bicubic(clip, format=vs.YUV420P10, matrix=1)
+clip = adj.Tweak(clip, bright=12, cont=0.95)
+clip = core.deblock.Deblock(clip, quant=20, aoffset=0, boffset=0)
+clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grainc=0)
 clip = core.resize.Spline36(clip, 1280, 720)
 clip.set_output()'
+
+VAPOUR_SYNTH_TPL="$VAPOUR_SYNTH_TPL2"
 
 ENCODER_TAG='<Tags>
   <Tag>
