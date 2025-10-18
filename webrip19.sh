@@ -18,7 +18,7 @@ halt() {
     exit 1
 }
 
-. settings.txt
+. webrip19.cfg
 
 # --- PREREQUISITES BEGIN
 
