@@ -43,47 +43,7 @@ VAPOURSYNTH=1
 FFMPEG_NORMALIZE=1
 SCRIPT_URL="https://github.com/riv19/WebRip19"
 
-# Simple template for high-quality video.
-VAPOUR_SYNTH_TPL1='import vapoursynth as vs
-
-core = vs.core
-core.num_threads = 2
-clip = core.bs.VideoSource(source='\''input_stream'\'')
-clip = core.resize.Spline36(clip, 1280, 720, format=vs.YUV420P10, matrix=1)
-clip.set_output()'
-
-# Repair badly deinterlaced content, do deband and deblock.
-# Fix brightness/contrast by using Tweak filter port from AviSynth.
-VAPOUR_SYNTH_TPL2='import vapoursynth as vs
-import adjust as adj
-from vsdeinterlace import qtgmc
-
-core = vs.core
-core.num_threads = 2
-clip = core.bs.VideoSource(source='\''input_stream'\'')
-clip = (
-    qtgmc.QTempGaussMC(clip, input_type=qtgmc.QTempGaussMC.InputType.PROGRESSIVE)
-    .prefilter()
-    .analyze(blksize=8)
-    .denoise()
-    .basic()
-    .source_match()
-    .lossless()
-    .sharpen()
-    .back_blend()
-    .sharpen_limit()
-    .final()
-    .motion_blur()
-    .deinterlace()
-)
-clip = core.resize.Bicubic(clip, format=vs.YUV420P10, matrix=1)
-clip = adj.Tweak(clip, bright=12, cont=0.95)
-clip = core.deblock.Deblock(clip, quant=20, aoffset=0, boffset=0)
-clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grainc=0)
-clip = core.resize.Spline36(clip, 1280, 720)
-clip.set_output()'
-
-VAPOUR_SYNTH_TPL="$VAPOUR_SYNTH_TPL2"
+VAPOUR_SYNTH_TPL=$(cat _hq.vpy)
 
 ENCODER_TAG='<Tags>
   <Tag>
