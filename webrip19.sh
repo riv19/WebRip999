@@ -230,7 +230,7 @@ done
 while IFS="" read -r line || [ -n "$line" ]
 do
     # Process one item, logging console output
-    process_one > >(tee -a "$LOG_FILE") 2> >(tee -a "$LOG_FILE" >&2)
+    process_one > >(tee -a "$LOG_FILE") 2>&1
     [ "$skip_line" -eq 0 ] || continue
 
     # Process progress bars in the log
