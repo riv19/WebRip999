@@ -53,6 +53,19 @@ cd "$TMPDIR"
 line=$(head -n 1 "$PLAYLIST")
 [[ "$line" == "#EXTM3U" ]] || halt "Missing #EXTM3U file header in playlist"
 
+ENCODER_TAG='<Tags>
+  <Tag>
+    <Simple>
+      <Name>ENCODER</Name>
+      <String>%%ENCODER_VERSION%%</String>
+    </Simple>
+    <Simple>
+      <Name>ENCODER_OPTIONS</Name>
+      <String>%%ENCODER_OPTIONS%%</String>
+    </Simple>
+  </Tag>
+</Tags>'
+
 process_one() {
     add_url=0
     skip_line=0
