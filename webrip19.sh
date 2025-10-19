@@ -111,6 +111,13 @@ process_one() {
     # Make a symbolic link to the input file.
     ln -sL "$path" input_stream
 
+    # Get video tracks information in json
+    jq_s=".tracks | map(select(.type == \"video\"))"
+    vid=$(mkvmerge -J input_stream | jq -r "$jq_s")
+    if [ $(echo "$vid" | jq -r 'length') -gt 1 ]; then
+        halt "Input files with multiple video streams are not yet supported"
+    fi
+
     # Make a VapourSynth script
     if [ "$VAPOURSYNTH" -eq 1 ]; then
         echo "$VAPOUR_SYNTH_TPL" > tmp.vpy
@@ -171,18 +178,41 @@ process_one() {
     fi
 
     # Process video
-    # Vapoursynth may be used for its video filters, such as QTGMC
-    if [ $VAPOURSYNTH -eq 1 ]; then
-        vspipe -c y4m tmp.vpy - | \
-            SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
-    else
-        mplayer input_stream -noconsolecontrols -really-quiet \
-            "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
-            SvtAv1EncApp "${SVTENC_ARGS[@]}" -b tmp.ivf -i stdin
-    fi
+    echo "Source video stream info:"
+    echo "$vid"
+    for res in "${VIDEO_RESOLUTIONS[@]}"
+    do
+        echo "Processing video stream in resolution $res:"
+        input_res=$(echo "$vid" | jq -r '.[0].properties.pixel_dimensions')
+        ew=$(echo "$input_res" | cut -d "x" -f 1)
+        eh=$(echo "$input_res" | cut -d "x" -f 2)
+        nh=$(echo "$res" | rev | cut -c2- | rev)
+        nw=$(expr \( $ew \* $nh + $eh / 2 \) / $eh)
+        echo "$nw"x"$nh" > resolution.txt
+        if [ $VAPOURSYNTH -eq 1 ]; then
+            # Each vps script must parse resolution.txt
+            vspipe -c y4m tmp.vpy - | \
+                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b "$res.ivf" -i stdin
+        else
+            # Substitute new width/height
+            for i in "${!MPLAYER_VIDEO_ARGS1[@]}"; do
+                MPLAYER_VIDEO_ARGS1[$i]="${MPLAYER_VIDEO_ARGS1[$i]/\%WIDTH\%/$nw}"
+                MPLAYER_VIDEO_ARGS1[$i]="${MPLAYER_VIDEO_ARGS1[$i]/\%HEIGHT\%/$nh}"
+            done
+
+            mplayer input_stream -noconsolecontrols -really-quiet \
+                "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
+                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b "$res.ivf" -i stdin
+        fi
+    done
+
+    vid_list=""
+    for i in "${!VIDEO_RESOLUTIONS[@]}"; do
+        vid_list+="${VIDEO_RESOLUTIONS[$i]}.ivf "
+    done
 
     # Merge Matroska, edit tags, add attachments
-    mkvmerge -o tmp.mkv "${MKVMERGE_ARGS[@]}" tmp.ivf tmp.opus
+    mkvmerge -o tmp.mkv "${MKVMERGE_ARGS[@]}" $vid_list tmp.opus
 }
 
 NUMBER=0
