@@ -111,12 +111,12 @@ process_one() {
     # Make a symbolic link to the input file.
     ln -sL "$path" input_stream
 
-    # Get video tracks information in json
+    # Get tracks information in json
+    info=$(mkvmerge -J input_stream)
     jq_s=".tracks | map(select(.type == \"video\"))"
-    vid=$(mkvmerge -J input_stream | jq -r "$jq_s")
-    if [ $(echo "$vid" | jq -r 'length') -gt 1 ]; then
-        halt "Input files with multiple video streams are not yet supported"
-    fi
+    vid=$(echo "$info" | jq -r "$jq_s")
+    jq_s=".tracks | map(select(.type == \"audio\"))"
+    aid=$(echo "$info" | jq -r "$jq_s")
 
     # Make a VapourSynth script
     if [ "$VAPOURSYNTH" -eq 1 ]; then
@@ -166,6 +166,8 @@ process_one() {
     # Process audio.
     # Mplayer has volnorm filer, but it has low quality (noticeable).
     # FFMpeg-normalize is far better, running in two passes.
+    echo "Source audio stream info:"
+    echo "$(echo "$aid" | jq -r '.[0].properties')"
     if [ $FFMPEG_NORMALIZE -eq 1 ]; then
         NO_COLOR=1 ffmpeg-normalize input_stream -v \
             "${FFMPEG_NORMALIZE_ARGS[@]}" -vn -ar 48000 -ext wav -o norm.wav
@@ -179,7 +181,7 @@ process_one() {
 
     # Process video
     echo "Source video stream info:"
-    echo "$vid"
+    echo "$(echo "$vid" | jq -r '.[0].properties')"
     for res in "${VIDEO_RESOLUTIONS[@]}"
     do
         echo "Processing video stream in resolution $res:"
