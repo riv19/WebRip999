@@ -73,17 +73,22 @@ tweak_ranges = [
 
 total = (0, clip.num_frames)
 skip_ranges = inverse_ranges(*total, tweak_ranges)
+final_ranges = sorted(tweak_ranges + skip_ranges, key=lambda r: r[0])
 
 clips = []
 
-for x, y in zip(tweak_ranges, skip_ranges):
-    clips.append(adj.Tweak(clip[x[0] : x[1]], bright=32, cont=1.10))
-    clips.append(clip[y[0] : y[1]])
+for x in final_ranges:
+    if x in tweak_ranges:
+        clips.append(adj.Tweak(clip[x[0] : x[1]], bright=0, cont=0.90))
+    elif x in skip_ranges:
+        clips.append(clip[x[0] : x[1]])
 
 with open('resolution.txt', 'r', encoding='utf-8') as f:
     newres = f.read().split('x')
-
+old_num_frames = clip.num_frames
 clip = core.std.Splice(clips, mismatch=False)
+new_num_frames = clip.num_frames
+assert old_num_frames == new_num_frames
 clip = core.deblock.Deblock(clip, quant=20, aoffset=0, boffset=0)
 clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grainc=0)
 clip = core.resize.Spline36(clip, int(newres[0]), int(newres[1]))
