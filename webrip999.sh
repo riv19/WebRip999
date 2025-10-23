@@ -66,6 +66,23 @@ ENCODER_TAG='<Tags>
   </Tag>
 </Tags>'
 
+calc_resolution() {
+    width="$1"
+    height="$2"
+    target_height="$3"
+
+    # Compute proportional width (integer division)
+    new_width=$(expr $width \* $target_height / $height)
+
+    # Ensure width is even (FFmpeg requires this)
+    remainder=$(expr $new_width % 2 || :)
+    if [ $remainder -ne 0 ]; then
+        new_width=$(expr $new_width + 1)
+    fi
+
+    echo "${new_width}x${target_height}"
+}
+
 process_one() {
     add_url=0
     skip_line=0
@@ -189,8 +206,7 @@ process_one() {
         ew=$(echo "$input_res" | cut -d "x" -f 1)
         eh=$(echo "$input_res" | cut -d "x" -f 2)
         nh=$(echo "$res" | rev | cut -c2- | rev)
-        nw=$(expr \( $ew \* $nh + $eh / 2 \) / $eh)
-        echo "$nw"x"$nh" > resolution.txt
+        calc_resolution "$ew" "$eh" "$nh" > resolution.txt
         if [ $VAPOURSYNTH -eq 1 ]; then
             # Each vps script must parse resolution.txt
             vspipe -c y4m tmp.vpy - | \
