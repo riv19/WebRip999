@@ -1,7 +1,16 @@
 # Repair badly deinterlaced progressive content - 1px horizontal combing effect
 # on movement. NNEDI3 in anti-alias mode outperforms QTGMC in this case, but it
 # is more aggressive. Adjust brightness/contrast only to specified frame ranges.
-# Apply deblock and deband for low-bitrate material. Resize to 720p.
+# Apply deblock and deband for low-bitrate material.
+
+# Prerequisites (assuming Arch Linux):
+# vapoursynth-plugin-bestsource
+# vapoursynth-plugin-adjust
+# vapoursynth-plugin-vsjetpack
+# vapoursynth-plugin-nnedi3
+# vapoursynth-plugin-deblock
+# vapoursynth-plugin-neo_f3kdb
+# ?
 
 import vapoursynth as vs
 import adjust as adj
@@ -85,6 +94,7 @@ for x in final_ranges:
 
 with open('resolution.txt', 'r', encoding='utf-8') as f:
     newres = f.read().split('x')
+
 old_num_frames = clip.num_frames
 clip = core.std.Splice(clips, mismatch=False)
 new_num_frames = clip.num_frames

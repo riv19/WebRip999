@@ -1,6 +1,9 @@
 # Simple script for high quality video - no heavy filtering required.
 # Resize to 720p YUV420P10.
 
+# Prerequisites (assuming Arch Linux):
+# vapoursynth-plugin-bestsource
+
 import vapoursynth as vs
 
 core = vs.core
