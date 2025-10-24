@@ -1,8 +1,12 @@
-# Repair badly deinterlaced progressive content - 1px horizontal combing effect
-# on movement. NNEDI3 in anti-alias mode outperforms QTGMC in this case, but it
-# is more aggressive. Adjust brightness/contrast only to specified frame ranges.
-# Apply deblock and deband for low-bitrate material.
-
+# * Repair badly deinterlaced progressive content - 1px horizontal combing
+# effect on movement. NNEDI3 in anti-alias mode outperforms QTGMC in this case,
+# but it is more aggressive - does not distinguish between artifacts and real
+# information, but it is simply lost in this case.
+# * Remove over-saturation by adjusting brightness/contrast only to specified
+# frame ranges - edit the arrays below.
+# * Apply deblock and deband for low-bitrate yuv420p8 material.
+# * Resize to resolution specified in `resolution.txt`
+#
 # Prerequisites (assuming Arch Linux):
 # vapoursynth-plugin-bestsource
 # vapoursynth-plugin-adjust
@@ -20,8 +24,15 @@ from vsaa.deinterlacers import NNEDI3
 core = vs.core
 core.num_threads = 2
 clip = core.bs.VideoSource(source='input_stream')
+orig_num_frames = clip.num_frames
+
 clip = NNEDI3().antialias(clip, direction=AntiAliaser.AADirection.VERTICAL)
 clip = core.resize.Bicubic(clip, format=vs.YUV420P10, matrix=1)
+
+bright = 0
+cont = 0.90
+
+# ----- Apply brightness/contrast per frame ranges
 
 def inverse_ranges(total_start, total_end, used_ranges):
     # Sort the ranges to process in order
@@ -92,14 +103,19 @@ for x in final_ranges:
     elif x in skip_ranges:
         clips.append(clip[x[0] : x[1]])
 
-with open('resolution.txt', 'r', encoding='utf-8') as f:
-    newres = f.read().split('x')
-
-old_num_frames = clip.num_frames
 clip = core.std.Splice(clips, mismatch=False)
-new_num_frames = clip.num_frames
-assert old_num_frames == new_num_frames
+
+# ----- Deblock, deband, etc.
+
 clip = core.deblock.Deblock(clip, quant=20, aoffset=0, boffset=0)
 clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grainc=0)
+
+# ----- Resize
+
+with open('resolution.txt', 'r', encoding='utf-8') as f:
+    newres = f.read().split('x')
 clip = core.resize.Spline36(clip, int(newres[0]), int(newres[1]))
+
+# Verify that resulting clip has exactly the same length
+assert old_num_frames == new_num_frames
 clip.set_output()
