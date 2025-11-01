@@ -251,7 +251,7 @@ do
     [ "$skip_line" -eq 0 ] || continue
 
     # Process progress bars in the log
-    sed -i 's/.*\r//;:a;s/.\x08//;ta;s/\x08//' "$LOG_FILE"
+    sed -i 's/.*\r//;:a;s/.\x08//;ta;s/\x08//;s/[[:space:]]\+$//' "$LOG_FILE"
 
     mkvpropedit tmp.mkv --tags track:v1:video_tag.xml --add-track-statistics-tags \
         "${MKVPROPEDIT_ARGS[@]}" --add-attachment "$LOG_FILE"
