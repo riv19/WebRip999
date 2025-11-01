@@ -257,7 +257,7 @@ do
         "${MKVPROPEDIT_ARGS[@]}" --add-attachment "$LOG_FILE"
 
     # Move resulting file and cleanup
-    prefix=$(printf "%03d\n" $NUMBER)
+    prefix=$(printf "%04d\n" $NUMBER)
     mv tmp.mkv "$OUT_DIR/$prefix# ${input_files[0]}"
     rm -f "$TMPDIR/"*
 
