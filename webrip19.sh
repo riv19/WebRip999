@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -euo pipefail
-IFS=$'\n\t'
 
 # See README.md for help.
 
