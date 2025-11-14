@@ -11,7 +11,8 @@
 # vapoursynth-plugin-bestsource
 # vapoursynth-plugin-adjust
 # vapoursynth-plugin-vsjetpack
-# vapoursynth-plugin-nnedi3
+# vapoursynth-plugin-nnedi3 (CPU)
+# vapoursynth-plugin-sneedif (GPU)
 # vapoursynth-plugin-deblock
 # vapoursynth-plugin-neo_f3kdb
 # ?
@@ -26,7 +27,7 @@ core.num_threads = 2
 clip = core.bs.VideoSource(source='input_stream')
 orig_num_frames = clip.num_frames
 
-clip = NNEDI3().antialias(clip, direction=AntiAliaser.AADirection.VERTICAL)
+clip = NNEDI3(opencl=True).antialias(clip, direction=AntiAliaser.AADirection.VERTICAL)
 clip = core.resize.Bicubic(clip, format=vs.YUV420P10, matrix=1)
 
 bright = 0
