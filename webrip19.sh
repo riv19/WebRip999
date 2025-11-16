@@ -235,7 +235,7 @@ process_one() {
 NUMBER=0
 while [ 1 ]
 do
-    prefix=$(printf "%03d\n" $NUMBER)
+    prefix=$(printf "%04d\n" $NUMBER)
     if ls "$OUT_DIR/$prefix# "* >/dev/null 2>&1
     then
         NUMBER=$((NUMBER + 1))
