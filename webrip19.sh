@@ -37,11 +37,6 @@ which mplayer >/dev/null 2>&1 || halt "Please install \"mplayer\""
 
 # --- PREREQUISITES END
 
-if [[ -d "$TMPDIR" ]]
-then
-    rm -rf "$TMPDIR"
-fi
-
 CURR_DIR="$PWD"
 OUT_DIR="$HOME/Videos/WebRip19"
 mkdir -p "$TMPDIR"
@@ -88,15 +83,27 @@ process_one() {
 
     # Get the source file and extract thumbnail/cover
     if [[ "$line" == https://* || "$line" == http://* ]]; then
-        yt-dlp --write-thumbnail --convert-thumbnails png \
-            --abort-on-unavailable-fragments \
-            -t mkv "${YTDLP_ARGS[@]}" "$line" 2>&1
+        if [[ -f src.url ]] && [[ "$(cat src.url)" == "$line" ]]; then
+            echo "Source file already exists for $line"
+            # Do not reget source MKV, if it's already the same
+            find . -maxdepth 1 \( -type f -o -type l \) ! -name "*.mkv" \
+                ! -name "*.png" ! -name "*.json" ! -name "*.srt" \
+                ! -name "*.url" ! -name "*.description" -delete
+        else
+            rm -rf "$TMPDIR/"*
+            yt-dlp --write-thumbnail --convert-thumbnails png \
+                --abort-on-unavailable-fragments \
+                -t mkv "${YTDLP_ARGS[@]}" "$line" 2>&1
+        fi
+
+        echo -n "$line" > src.url
         input_files=( *.mkv )
         thumbnail_files=( *.png )
         desc_files=( *.description )
         path="./${input_files[0]}"
         add_url=1
     elif [[ "$line" == file://* ]]; then
+        rm -rf "$TMPDIR/"*
         path="${line:7}"
         filename="$(basename "$path")"
         ln -s "$path" "$filename"
@@ -173,7 +180,7 @@ process_one() {
 
     # Prepare description (it's not standardized - just add as attachment)
     if [[ -f "${desc_files[0]}" ]]; then
-        mv "${desc_files[0]}" description.txt
+        cp "${desc_files[0]}" description.txt
         echo -e "\n\nProcessed with WebRip19: $SCRIPT_URL" >> description.txt
         [ $add_url -eq 0 ] || echo "Original Video: $line" >> description.txt
         MKVPROPEDIT_ARGS+=( --add-attachment description.txt )
@@ -259,7 +266,6 @@ do
     # Move resulting file and cleanup
     prefix=$(printf "%04d\n" $NUMBER)
     mv tmp.mkv "$OUT_DIR/$prefix# ${input_files[0]}"
-    rm -f "$TMPDIR/"*
 
     NUMBER=$((NUMBER + 1))
 done < "$PLAYLIST"
