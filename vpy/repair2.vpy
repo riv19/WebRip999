@@ -25,7 +25,7 @@ from vsaa.deinterlacers import NNEDI3
 
 core = vs.core
 core.num_threads = 2
-clip = core.bs.VideoSource(source='input_stream')
+clip = core.bs.VideoSource(source='%%INPUT_STREAM%%')
 orig_num_frames = clip.num_frames
 
 clip = NNEDI3(opencl=True).antialias(clip, direction=AntiAliaser.AADirection.VERTICAL)
@@ -138,9 +138,7 @@ clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grain
 
 # ----- Resize
 
-with open('resolution.txt', 'r', encoding='utf-8') as f:
-    newres = f.read().split('x')
-clip = core.resize.Spline36(clip, int(newres[0]), int(newres[1]))
+clip = core.resize.Spline36(clip, %%VIDEO_WIDTH%%, %%VIDEO_HEIGHT%%)
 
 # Verify that resulting clip has exactly the same length
 assert orig_num_frames == clip.num_frames

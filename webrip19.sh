@@ -32,17 +32,17 @@ which mkvpropedit >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 which mplayer >/dev/null 2>&1 || halt "Please install \"mplayer\""
 [ "$VAPOURSYNTH" -eq 0 ] || which vspipe >/dev/null 2>&1 || \
     halt "Please install \"vapoursynth\""
-[ "$FFMPEG_NORMALIZE" -eq 0 ] || which ffmpeg-normalize >/dev/null 2>&1 || \
+[ "$DRC" -eq 0 ] || which ffmpeg-normalize >/dev/null 2>&1 || \
     halt "Please install \"ffmpeg-normalize\""
 
 # --- PREREQUISITES END
 
 CURR_DIR="$PWD"
 OUT_DIR="$HOME/Videos/WebRip19"
-mkdir -p "$TMPDIR"
+mkdir -p "$TMPDIR/dl"
+mkdir -p "$TMPDIR/src"
+mkdir -p "$TMPDIR/dst"
 mkdir -p "$OUT_DIR"
-
-cd "$TMPDIR"
 
 line=$(head -n 1 "$PLAYLIST")
 [[ "$line" == "#EXTM3U" ]] || halt "Missing #EXTM3U file header in playlist"
@@ -60,16 +60,103 @@ ENCODER_TAG='<Tags>
   </Tag>
 </Tags>'
 
+size_bytes_from_file() {
+    local file="$1"
+
+    # Detect GNU vs BSD stat
+    if stat --version >/dev/null 2>&1; then
+        size=$(stat -L -c%s "$file")       # GNU stat (Linux)
+    else
+        size=$(stat -L -f%z "$file")       # BSD stat (macOS, FreeBSD)
+    fi
+
+    echo "$size"
+}
+
+human_size_from_file() {
+    local file="$1"
+    local size=$(size_bytes_from_file "$file")
+
+    local units=(B KB MB GB TB PB)
+    local i=0
+
+    while (( size >= 1024 && i < ${#units[@]}-1 )); do
+        size=$(( size / 1024 ))
+        ((i++))
+    done
+
+    echo "${size}${units[$i]}"
+}
+
+app_ver_short() {
+    local out
+    out="$("$1" --version 2>/dev/null || "$1" -V 2>/dev/null || "$1" -v 2>/dev/null)"
+    echo "$out" | grep -oE '[0-9]+(\.[0-9]+){1,3}' | head -n1
+}
+
+app_ver() {
+    echo $("$1" --version 2>/dev/null | head -n1)
+}
+
+get_sample_rate_from_file() {
+    local filepath="$1"
+    local info regex sr_hz sr_khz int_khz dec_khz hz
+
+    info=$(file "$filepath")
+
+    # Match "... 44100 Hz ..."
+    regex='s/.* \([0-9]\+\) Hz.*/\1/p'
+    sr_hz=$(echo "$info" | sed -n "$regex")
+    if [[ -n "$sr_hz" ]]; then
+        echo "$sr_hz"
+        return
+    fi
+
+    # Match "... 44.1 kHz ..." or "... 48 kHz ..."
+    regex='s/.* \([0-9.]\+\) kHz.*/\1/p'
+    sr_khz=$(echo "$info" | sed -n "$regex")
+    if [[ -n "$sr_khz" ]]; then
+        int_khz="${sr_khz%.*}"
+        dec_khz="${sr_khz#*.}"
+
+        if [[ "$int_khz" == "$dec_khz" ]]; then
+            # No decimal part: "48"
+            hz=$(( int_khz * 1000 ))
+        else
+            # Has decimal part: "44.1"
+            # decimal digit * 100 (only one decimal place expected from file)
+            hz=$(( int_khz * 1000 + dec_khz * 100 ))
+        fi
+
+        echo "$hz"
+        return
+    fi
+
+    # No match — echo empty
+    echo ""
+}
+
+get_video_resolution_from_file() {
+    local filepath="$1"
+    local info resolution
+
+    info=$(file "$filepath")
+    local regex='s/.* \([0-9]\+x[0-9]\+\).*/\1/p'
+    resolution=$(echo "$info" | sed -n "$regex")
+
+    echo "$resolution"
+}
+
 calc_resolution() {
-    width="$1"
-    height="$2"
-    target_height="$3"
+    local width="$1"
+    local height="$2"
+    local target_height="$3"
 
     # Compute proportional width (integer division)
-    new_width=$(expr $width \* $target_height / $height)
+    local new_width=$(expr $width \* $target_height / $height)
 
     # Ensure width is even (FFmpeg requires this)
-    remainder=$(expr $new_width % 2 || :)
+    local remainder=$(expr $new_width % 2 || :)
     if [ $remainder -ne 0 ]; then
         new_width=$(expr $new_width + 1)
     fi
@@ -77,196 +164,347 @@ calc_resolution() {
     echo "${new_width}x${target_height}"
 }
 
-process_one() {
-    add_url=0
-    skip_line=0
+retrieve_stream_yt_dlp() {
+    echo "$STEP.) Retrieving files (yt-dlp)"
 
-    # Get the source file and extract thumbnail/cover
-    if [[ "$line" == https://* || "$line" == http://* ]]; then
-        if [[ -f src.url ]] && [[ "$(cat src.url)" == "$line" ]]; then
-            echo "Source file already exists for $line"
-            # Do not reget source MKV, if it's already the same
-            find . -maxdepth 1 \( -type f -o -type l \) ! -name "*.mkv" \
-                ! -name "*.png" ! -name "*.json" ! -name "*.srt" \
-                ! -name "*.url" ! -name "*.description" ! -name "*.log" -delete
-        else
-            rm -rf "$TMPDIR/"*
-            yt-dlp --write-thumbnail --convert-thumbnails png \
-                --abort-on-unavailable-fragments \
-                -t mkv "${YTDLP_ARGS[@]}" "$line" 2>&1
-        fi
+    local stream="$1"
 
-        echo -n "$line" > src.url
-        input_files=( *.mkv )
-        thumbnail_files=( *.png )
-        desc_files=( *.description )
-        path="./${input_files[0]}"
-        add_url=1
-    elif [[ "$line" == file://* ]]; then
-        rm -rf "$TMPDIR/"*
-        path="${line:7}"
-        filename="$(basename "$path")"
-        ln -s "$path" "$filename"
-        input_files=( "$filename" )
-        if [[ $(file -brL --mime-type "$filename") == "video/x-matroska" ]]
-        then
-            # Cover/thumbnail
-            json=$(mkvmerge "$filename" -J | \
-                jq '.attachments | map(select(.file_name | startswith("cover")))')
-            id=$(echo "$json" | jq -r .[0].id)
-            file_name=$(echo "$json" | jq -r .[0].file_name)
-            mkvextract attachments "$filename" "$id":"$file_name"
-            thumbnail_files=( "$file_name" )
-            # Description/annotation
-            json=$(mkvmerge "$filename" -J | \
-                jq '.attachments | map(select(.file_name == "description.txt"))')
-            id=$(echo "$json" | jq -r .[0].id)
-            file_name=$(echo "$json" | jq -r .[0].file_name)
-            mkvextract attachments "$filename" "$id":"$file_name.description"
-            desc_files=( "$file_name.description" )
-        fi
+    # Do not reget source MKV, if exists and URL matches
+    if [[ -f source_url ]] && [[ "$(cat source_url)" == "$stream" ]]; then
+        echo "Skipping download: Source file already exists for this URL"
     else
-        skip_line=1
-        return
+        rm -rf "$TMPDIR/dl/source_url" "$TMPDIR/dl/"*.description \
+            "$TMPDIR/dl/"*.json "$TMPDIR/dl/"*.mkv "$TMPDIR/dl/"*.png
+        yt-dlp --write-thumbnail --convert-thumbnails png \
+            --abort-on-unavailable-fragments \
+            -t mkv "${YTDLP_ARGS[@]}" "$stream" 2>&1
+        echo "$stream" > source_url
     fi
 
-    # Some tools may fail with Unicode file names.
-    # Make a symbolic link to the input file.
-    ln -sL "$path" input_stream
+    local size_bytes=$(size_bytes_from_file *.mkv)
+    local human_size=$(human_size_from_file *.mkv)
 
-    # Get tracks information in json
-    info=$(mkvmerge -J input_stream)
-    jq_s=".tracks | map(select(.type == \"video\"))"
-    vid=$(echo "$info" | jq -r "$jq_s")
-    jq_s=".tracks | map(select(.type == \"audio\"))"
-    aid=$(echo "$info" | jq -r "$jq_s")
+    echo
+    echo "* Source file size: $human_size ($size_bytes bytes)"
+}
 
-    # Make a VapourSynth script
-    if [ "$VAPOURSYNTH" -eq 1 ]; then
-        echo "$VAPOUR_SYNTH_TPL" > tmp.vpy
+retrieve_stream_local() {
+    path="${line:7}"
+    filename="$(basename "$path")"
+    ln -s "$path" "$filename"
+    input_files=( "$filename" )
+    if [[ $(file -brL --mime-type "$filename") == "video/x-matroska" ]]
+    then
+        # Cover/thumbnail
+        json=$(mkvmerge "$filename" -J | \
+            jq '.attachments | map(select(.file_name | startswith("cover")))')
+        id=$(echo "$json" | jq -r .[0].id)
+        file_name=$(echo "$json" | jq -r .[0].file_name)
+        mkvextract attachments "$filename" "$id":"$file_name"
+        thumbnail_files=( "$file_name" )
+        # Description/annotation
+        json=$(mkvmerge "$filename" -J | \
+            jq '.attachments | map(select(.file_name == "description.txt"))')
+        id=$(echo "$json" | jq -r .[0].id)
+        file_name=$(echo "$json" | jq -r .[0].file_name)
+        mkvextract attachments "$filename" "$id":"$file_name.description"
+        desc_files=( "$file_name.description" )
+    fi
+}
+
+extract_tracks() {
+    echo "$STEP.) Extracting tracks"
+
+    ln -sL ../dl/*.mkv input_stream
+    if [ -f ../dl/*.png ]; then ln -sL ../dl/*.png cover; fi
+    if [ -f ../dl/*.description ]; then
+        ln -sL ../dl/*.description description
+    fi
+
+    # This looks like not necessary, but some tools like ffmpeg-normalize can't
+    # read from stdin or can parse only certain container formats. Also it
+    # throws possible errors early, in case of corrupted source.
+    local source_info=$(mkvmerge -J input_stream)
+    local -a tracks=()
+    while IFS= read -r item; do
+        local type=$(echo "$item" | jq -r '.type')
+        local tid=$(echo "$item" | jq -r '.id')
+        if [[ "$type" == "audio" ]]; then
+            echo "Source audio (id $tid) stream info:"
+            echo "$(echo "$item" | jq -r '.properties')"
+            tracks+=("$tid audio")
+        elif [[ "$type" == "video" ]]; then
+            echo "Source video (id $tid) stream info:"
+            echo "$(echo "$item" | jq -r '.properties')"
+            tracks+=("$tid video")
+        else
+            echo "BUG: Unsupported track type: $type"
+        fi
+    done < <(echo "$source_info" | jq -rc '.tracks[]')
+
+    for track in "${tracks[@]}"; do
+        local tid=$(echo "$track" | cut -d" " -f1)
+        local type=$(echo "$track" | cut -d" " -f2)
+        mkvextract tracks input_stream $tid:$type$tid
+    done
+
+    echo "$source_info" > source_info
+}
+
+process_cover() {
+    echo "$STEP.) Processing cover image"
+
+    if [[ -f "../src/cover" ]]; then
+        # Avoid recompression if already in target format
+        if [[ $(file -brL --mime-type "../src/cover") != "image/avif" ]]
+        then
+            echo "Encoding image with avifenc v$(app_ver_short avifenc)"
+            echo "Arguments: ${AVIFENC_ARGS[@]}"
+            avifenc "${AVIFENC_ARGS[@]}" "../src/cover" cover
+        else
+            echo "Skipping encoding: Already in required format"
+            ln -sL "../src/cover" cover
+        fi
+    else
+        echo "No cover image in source stream"
+    fi
+}
+
+process_audio() {
+    echo "$STEP.) Processing audio"
+
+    for track in ../src/audio*; do
+        if [ $DRC -eq 1 ]; then
+            echo "Applying Dynamic Range Compression (DRC) with ffmpeg-normalize v$(app_ver_short ffmpeg-normalize)"
+            echo "Arguments: ${FFMPEG_NORMALIZE_ARGS[@]}"
+            local sample_rate=$(get_sample_rate_from_file "$track")
+            NO_COLOR=1 ffmpeg-normalize "$track" -ar $sample_rate -c:a flac -v \
+                "${FFMPEG_NORMALIZE_ARGS[@]}" -e="-sample_fmt s16" -o norm.flac
+            mv -f norm.flac "$track"
+        fi
+
+        echo "Encoding audio track with opusenc v$(app_ver_short opusenc)"
+        echo "Arguments: ${OPUSENC_ARGS[@]}"
+        mplayer "$track" -noconsolecontrols -really-quiet -vo null \
+            -ao pcm:fast:file=/dev/stdout -af format=s16le | \
+            opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+    done
+}
+
+process_video() {
+    echo "$STEP.) Processing video"
+
+    for track in ../src/video*; do
+        local resolution=$(get_video_resolution_from_file "$track")
+        if [ -z "$resolution" ]; then
+            jq_s=".tracks[] | select(.id == 1) | .properties.pixel_dimensions"
+            resolution=$(cat ../src/source_info | jq -r "$jq_s")
+        fi
+        local width=$(echo "$resolution" | cut -d'x' -f1)
+        local height=$(echo "$resolution" | cut -d'x' -f2)
+        echo "Video track source resolution: $resolution"
+
+        if [ $VAPOURSYNTH -eq 1 ]; then
+            echo "Preparing Vapoursynth script \"$VPY_FILE\""
+            echo "$VAPOUR_SYNTH_TPL" > "$TMPDIR/$VPY_FILE"
+            sed -i "s/%%INPUT_STREAM%%/src\/$(basename $track)/g" "$TMPDIR/$VPY_FILE"
+            sed -i "s/%%VIDEO_WIDTH%%/$width/g" "$TMPDIR/$VPY_FILE"
+            sed -i "s/%%VIDEO_HEIGHT%%/$height/g" "$TMPDIR/$VPY_FILE"
+        fi
+
+        echo "Encoding video track with SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+        echo "Arguments: ${SVTENC_ARGS[@]}"
+
+        if [ $VAPOURSYNTH -eq 1 ]; then
+            vspipe -c y4m "$TMPDIR/$VPY_FILE" - | SvtAv1EncApp "${SVTENC_ARGS[@]}" \
+                -b $(basename $track) -i stdin
+        else
+            local mplayer_args=$(echo "${MPLAYER_VIDEO_ARGS[@]}" | \
+                sed "s/%%VIDEO_WIDTH%%/$width/g" | \
+                sed "s/%%VIDEO_HEIGHT%%/$height/g")
+            mplayer "$track" -noconsolecontrols -really-quiet \
+                $mplayer_args -vo yuv4mpeg:file=/dev/stdout \
+                -ao null | SvtAv1EncApp "${SVTENC_ARGS[@]}" \
+                -b $(basename $track) -i stdin
+        fi
+    done
+}
+
+merge_files() {
+    echo "$STEP.) Merging files"
+
+    # Move remaining unprocessed files to destination dir
+    if [ -f ../src/description ]; then
+        ln -sL ../src/description
     fi
 
     # Make a XML tags file with encoder options for the video track
-    svtav1_ver="$(SvtAv1EncApp --version | head -n1)"
-    svtav1_args="${SVTENC_ARGS[@]}"
+    local svtav1_ver="$(SvtAv1EncApp --version | head -n1)"
+    local svtav1_args="${SVTENC_ARGS[@]}"
     echo "$ENCODER_TAG" | \
         sed "s/%%ENCODER_VERSION%%/$svtav1_ver/" | \
-        sed "s/%%ENCODER_OPTIONS%%/$svtav1_args/" | tr -s '[:space:]' > video_tag.xml
+        sed "s/%%ENCODER_OPTIONS%%/$svtav1_args/" | \
+        tr -s '[:space:]' > "$TMPDIR/video_tag"
 
-    # Prepare a thumbnail
-    if [[ -f "${thumbnail_files[0]}" ]]; then
-        # Avoid recompression if already in AVIF format
-        if [[ $(file -brL --mime-type "${thumbnail_files[0]}") != "image/avif" ]]
-        then
-            avifenc "${AVIFENC_ARGS[@]}" "${thumbnail_files[0]}" cover.avif
-        elif [[ "${thumbnail_files[0]}" != cover.avif ]]
-        then
-            ln -s "${thumbnail_files[0]}" cover.avif
-        fi
-        MKVPROPEDIT_ARGS+=( --add-attachment cover.avif )
-    fi
+    # Merge Matroska
+    mkvmerge -o output_stream video* audio*
 
-    MKVMERGE_ARGS=( )
+    local size_bytes=$(size_bytes_from_file output_stream)
+    local human_size=$(human_size_from_file output_stream)
 
-    # Prepare chapters
-    if [[ $(file -brL --mime-type input_stream) == "video/x-matroska" ]]
-    then
-        mkvextract input_stream chapters chapters.xml
-        if [[ -f chapters.xml ]]
-        then
-            MKVMERGE_ARGS+=( --chapters chapters.xml )
-        fi
-    fi
-
-    # Prepare description (it's not standardized - just add as attachment)
-    if [[ -f "${desc_files[0]}" ]]; then
-        cp "${desc_files[0]}" description.txt
-        echo -e "\n\nProcessed with WebRip19: $SCRIPT_URL" >> description.txt
-        [ $add_url -eq 0 ] || echo "Original Video: $line" >> description.txt
-        MKVPROPEDIT_ARGS+=( --add-attachment description.txt )
-    fi
-
-    # Process audio.
-    # Mplayer has volnorm filer, but it has low quality (noticeable).
-    # FFMpeg-normalize is far better, running in two passes.
-    echo "Source audio stream info:"
-    echo "$(echo "$aid" | jq -r '.[0].properties')"
-    if [ $FFMPEG_NORMALIZE -eq 1 ]; then
-        NO_COLOR=1 ffmpeg-normalize input_stream -v \
-            "${FFMPEG_NORMALIZE_ARGS[@]}" -vn -ar 48000 -ext wav -o norm.wav
-        opusenc "${OPUSENC_ARGS[@]}" --ignorelength norm.wav tmp.opus
-        rm norm.wav
-    else
-        mplayer input_stream -noconsolecontrols -really-quiet -vo null \
-            -ao pcm:fast:file=/dev/stdout -af format=s16le | \
-            opusenc "${OPUSENC_ARGS[@]}" --ignorelength - tmp.opus
-    fi
-
-    # Process video
-    echo "Source video stream info:"
-    echo "$(echo "$vid" | jq -r '.[0].properties')"
-    for res in "${VIDEO_RESOLUTIONS[@]}"
-    do
-        echo "Processing video stream in resolution $res:"
-        input_res=$(echo "$vid" | jq -r '.[0].properties.pixel_dimensions')
-        ew=$(echo "$input_res" | cut -d "x" -f 1)
-        eh=$(echo "$input_res" | cut -d "x" -f 2)
-        nh=$(echo "$res" | rev | cut -c2- | rev)
-        calc_resolution "$ew" "$eh" "$nh" > resolution.txt
-        if [ $VAPOURSYNTH -eq 1 ]; then
-            # Each vps script must parse resolution.txt
-            vspipe -c y4m tmp.vpy - | \
-                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b "$res.ivf" -i stdin
-        else
-            # Substitute new width/height
-            for i in "${!MPLAYER_VIDEO_ARGS1[@]}"; do
-                MPLAYER_VIDEO_ARGS1[$i]="${MPLAYER_VIDEO_ARGS1[$i]/\%WIDTH\%/$nw}"
-                MPLAYER_VIDEO_ARGS1[$i]="${MPLAYER_VIDEO_ARGS1[$i]/\%HEIGHT\%/$nh}"
-            done
-
-            mplayer input_stream -noconsolecontrols -really-quiet \
-                "${MPLAYER_VIDEO_ARGS[@]}" -vo yuv4mpeg:file=/dev/stdout -ao null | \
-                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b "$res.ivf" -i stdin
-        fi
-    done
-
-    vid_list=""
-    for i in "${!VIDEO_RESOLUTIONS[@]}"; do
-        vid_list+="${VIDEO_RESOLUTIONS[$i]}.ivf "
-    done
-
-    # Merge Matroska, edit tags, add attachments
-    mkvmerge -o tmp.mkv "${MKVMERGE_ARGS[@]}" $vid_list tmp.opus
+    echo
+    echo "* Resulting file size (without attachments): $human_size ($size_bytes bytes)"
 }
 
-NUMBER=0
+process_one() {
+    local stream="$1"
+
+    echo "::: Processing stream $STREAM_NUM of $STREAM_COUNT: $stream"
+    echo
+
+    # Get the source file
+    cd "$TMPDIR/dl"
+    if [[ "$stream" == https://* || "$stream" == http://* ]]; then
+        retrieve_stream_yt_dlp "$stream"
+        echo
+    elif [[ "$stream" == file://* ]]; then
+        retrieve_stream_local "$stream"
+        echo
+    else
+        echo "Unsupported URL schema: $stream"
+        return
+    fi
+
+    # Extract audio and video tracks
+    STEP=$((STEP + 1))
+    cd "$TMPDIR/src"
+    extract_tracks
+    echo
+
+    # Compress or copy cover image
+    STEP=$((STEP + 1))
+    cd "$TMPDIR/dst"
+    process_cover
+    echo
+
+    # Compress or copy audio
+    STEP=$((STEP + 1))
+    cd "$TMPDIR/dst"
+    process_audio
+    echo
+
+    # Compress or copy video
+    STEP=$((STEP + 1))
+    cd "$TMPDIR/dst"
+    process_video
+    echo
+
+    # Merge processed tracks and attachments
+    STEP=$((STEP + 1))
+    cd "$TMPDIR/dst"
+    merge_files
+    echo
+}
+
+# Function: extract file paths from M3U/M3U8 into a Bash array
+extract_m3u_paths() {
+    local playlist="$1"
+    local line=
+    local -n out_array="$2"
+
+    # Initialize output array
+    out_array=()
+
+    # Check if playlist exists
+    if [[ ! -f "$playlist" ]]; then
+        echo "Error: Playlist '$playlist' not found." >&2
+        exit 1
+    fi
+
+    # Read playlist line by line
+    while IFS="" read -r line || [ -n "$line" ]; do
+        # Skip empty lines or lines starting with '#'
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        out_array+=("$line")
+    done < "$playlist"
+}
+
+echo "WebRip19 Batch Video Archiving tool: $SCRIPT_URL"
+echo
+
+declare -a streams
+extract_m3u_paths "$PLAYLIST" streams
+
+OUTPUT_NUM=0
+STREAM_NUM=1
+STREAM_COUNT="${#streams[@]}"
 while [ 1 ]
 do
-    prefix=$(printf "%04d\n" $NUMBER)
+    prefix=$(printf "%04d\n" $OUTPUT_NUM)
     if ls "$OUT_DIR/$prefix# "* >/dev/null 2>&1
     then
-        NUMBER=$((NUMBER + 1))
+        OUTPUT_NUM=$((OUTPUT_NUM + 1))
         continue
     fi
     break
 done
 
-while IFS="" read -r line || [ -n "$line" ]
-do
-    # Process one item, logging console output
-    rm -f "$LOG_FILE"
-    process_one > >(tee -a "$LOG_FILE") 2>&1
-    [ "$skip_line" -eq 0 ] || continue
+finalize_stream() {
+    local -a edit_args=()
+    if [ -f cover ]; then
+        local cover_param="name=cover.avif,mime-type=image/avif"
+        edit_args+=( --add-attachment "$cover_param" cover )
+    fi
+    if [ -f description ]; then
+        local desc_param="name=description.txt,mime-type=text/plain"
+        edit_args+=( --add-attachment "$desc_param" description )
+    fi
+    edit_args+=( --add-attachment "../$LOG_FILE" )
 
-    # Process progress bars in the log
-    sed -i 's/.*\r//;:a;s/.\x08//;ta;s/\x08//;s/[[:space:]]\+$//' "$LOG_FILE"
+    # Mux tracks into the container
+    mkvpropedit output_stream --add-track-statistics-tags \
+        "${MKVPROPEDIT_ARGS[@]}" "${edit_args[@]}"
+}
 
-    mkvpropedit tmp.mkv --tags track:v1:video_tag.xml --add-track-statistics-tags \
-        "${MKVPROPEDIT_ARGS[@]}" --add-attachment "$LOG_FILE"
+main_loop() {
+    for stream in "${streams[@]}"; do
+        STEP=0
 
-    # Move resulting file and cleanup
-    prefix=$(printf "%04d\n" $NUMBER)
-    mv tmp.mkv "$OUT_DIR/$prefix# ${input_files[0]}"
+        # Cleanup remainings from previous runs
+        cd "$TMPDIR"
+        rm -f "$LOG_FILE"
+        rm -f "$VPY_FILE"
+        rm -f video_tag
+        rm -rf src/*
+        rm -rf dst/*
 
-    NUMBER=$((NUMBER + 1))
-done < "$PLAYLIST"
+        # Process one item, logging console output
+        process_one $stream > >(tee -a "$TMPDIR/$LOG_FILE") 2>&1
+
+        # Squash progress bars in the log
+        sed -i 's/.*\r//;:a;s/.\x08//;ta;s/\x08//;s/[[:space:]]\+$//' \
+            "$TMPDIR/$LOG_FILE"
+
+        cd "$TMPDIR/dst"
+        finalize_stream
+
+        # Move resulting file
+        local prefix=$(printf "%04d\n" $OUTPUT_NUM)
+        local old_name=$(readlink ../src/input_stream)
+        local old_basename=$(basename "$old_name")
+        mv output_stream "$OUT_DIR/$prefix# $old_basename"
+
+        # Cleanup
+        rm -rf dl/*
+        rm -rf src/*
+        rm -rf dst/*
+        rm -f "$TMPDIR/$LOG_FILE"
+        rm -f "$TMPDIR/$VPY_FILE"
+
+        OUTPUT_NUM=$((OUTPUT_NUM + 1))
+        STREAM_NUM=$((STREAM_NUM + 1))
+        echo
+    done
+}
+
+main_loop

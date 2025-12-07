@@ -1,7 +1,7 @@
-# A batch video conversion script - WebRip19
+# A batch video archiving tool - WebRip19
 
-Source files: an M3U playlist containing links to videos from any video hosting,
-supported by `yt-dlp` tool, or file:// URLs with local files.
+Source files: an M3U playlist containing URLs to streams from web resources such
+as video hostings, file servers; or local files.
 
 Output file format: AV1 video + Opus audio + AVIF thumbnail in Matroska
 container.
@@ -14,11 +14,8 @@ TODO:
 
 ## Usage
 
-1. Install prerequisites from the corresponding section of the script.
-
-*Vapoursynth may be difficult to install e.g. on Arch Linux, but it has nice
-filters such as QTGMC deinterlacer. Thus, it is optional and may be enabled
-by setting the option BYPASS_VAPOURSYNTH=0.*
+1. Install prerequisites from the corresponding section of the script. In case
+of missing something, the script will produce an error message with a hint.
 
 2. Edit the playlist file "playlist.m3u" to replace samples with your actual
 video files. Use the following URL types:
@@ -26,11 +23,14 @@ video files. Use the following URL types:
 * file://
 * http:// or https://
 
-3. Adjust settings in the settings section, if needed.
+Or run `yt-playlist.sh` to save YouTube playlists as M3U.
 
-4. Run the batch conversion: `./webrip19.sh`
+3. Adjust settings in the config file: select encoder for tracks, video
+resolutions, VapourSynth script, etc.
 
-5. Freely edit this script if your installed prerequisites are incompatible or
-if you want to use alternatives.
+4. Run the batch archiving: `./webrip19.sh`
 
-5. After completion, check `~/Videos/WebRip19` folder for the resulting files.
+5. Freely edit this script if your system does not provide what it expects.
+
+5. After completion, check the output folder (`~/Videos/WebRip19` by default)
+for the resulting files.
