@@ -24,7 +24,7 @@ from vsaa.deinterlacers import AntiAliaser
 from vsaa.deinterlacers import NNEDI3
 
 core = vs.core
-core.num_threads = 2
+core.num_threads = 1
 clip = core.bs.VideoSource(source='%%INPUT_STREAM%%')
 orig_num_frames = clip.num_frames
 

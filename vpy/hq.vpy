@@ -7,7 +7,7 @@
 import vapoursynth as vs
 
 core = vs.core
-core.num_threads = 2
+core.num_threads = 1
 clip = core.bs.VideoSource(source='%%INPUT_STREAM%%')
 
 clip = core.resize.Spline36(clip, %%VIDEO_WIDTH%%, %%VIDEO_HEIGHT%%, format=vs.YUV420P10, matrix=1)
