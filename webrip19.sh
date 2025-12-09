@@ -52,9 +52,7 @@ fi
 
 CURR_DIR="$PWD"
 OUT_DIR="$HOME/Videos/WebRip19"
-mkdir -p "$TMPDIR/dl"
-mkdir -p "$TMPDIR/src"
-mkdir -p "$TMPDIR/dst"
+mkdir -p "$TMPDIR"
 mkdir -p "$OUT_DIR"
 
 line=$(head -n 1 "$PLAYLIST")
@@ -372,14 +370,6 @@ merge_files() {
         ln -sL ../src/description
     fi
 
-    # Make a XML tags file with encoder options for the video track
-    local svtav1_ver="$(SvtAv1EncApp --version | head -n1)"
-    local svtav1_args="${SVTENC_ARGS[@]}"
-    echo "$ENCODER_TAG" | \
-        sed "s/%%ENCODER_VERSION%%/$svtav1_ver/" | \
-        sed "s/%%ENCODER_OPTIONS%%/$svtav1_args/" | \
-        tr -s '[:space:]' > "$TMPDIR/video_tag"
-
     # Merge Matroska
     mkvmerge -o output_stream video* audio*
 
@@ -395,6 +385,10 @@ process_one() {
 
     echo "::: Processing stream $STREAM_NUM of $STREAM_COUNT: $stream"
     echo
+
+    mkdir -p "$TMPDIR/dl"
+    mkdir -p "$TMPDIR/src"
+    mkdir -p "$TMPDIR/dst"
 
     # Get the source file
     cd "$TMPDIR/dl"
@@ -508,9 +502,8 @@ main_loop() {
         cd "$TMPDIR"
         rm -f "$LOG_FILE"
         rm -f "$VPY_FILE"
-        rm -f video_tag
-        rm -rf src/*
-        rm -rf dst/*
+        rm -rf src
+        rm -rf dst
 
         # Process one item, logging console output
         process_one $stream > >(tee -a "$TMPDIR/$LOG_FILE") 2>&1
@@ -529,11 +522,12 @@ main_loop() {
         mv output_stream "$OUT_DIR/$prefix# $old_basename"
 
         # Cleanup
-        rm -rf dl/*
-        rm -rf src/*
-        rm -rf dst/*
-        rm -f "$TMPDIR/$LOG_FILE"
-        rm -f "$TMPDIR/$VPY_FILE"
+        cd "$TMPDIR"
+        rm -rf dl
+        rm -rf src
+        rm -rf dst
+        rm -f "$LOG_FILE"
+        rm -f "$VPY_FILE"
 
         OUTPUT_NUM=$((OUTPUT_NUM + 1))
         STREAM_NUM=$((STREAM_NUM + 1))
