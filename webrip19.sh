@@ -30,16 +30,16 @@ which opusenc >/dev/null 2>&1 || halt "Please install \"opus-tools\""
 which mkvmerge >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 which mkvpropedit >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 
-if [[ "$DECODER" == vspipe ]]; then
+if [[ "$VIDEO_DECODER" == vspipe ]]; then
     which vspipe >/dev/null 2>&1 || halt "Please install \"vapoursynth\""
 fi
-if [[ "$DECODER" == ffmpeg ]]; then
+if [[ "$VIDEO_DECODER" == ffmpeg ]] || [[ "$AUDIO_DECODER" == ffmpeg ]]; then
     which ffmpeg >/dev/null 2>&1 || halt "Please install \"ffmpeg\""
 fi
-if [[ "$DECODER" == mpv ]]; then
+if [[ "$VIDEO_DECODER" == mpv ]] || [[ "$AUDIO_DECODER" == mpv ]]; then
     which mpv >/dev/null 2>&1 || halt "Please install \"mpv\""
 fi
-if [[ "$DECODER" == mplayer ]]; then
+if [[ "$VIDEO_DECODER" == mplayer ]] || [[ "$AUDIO_DECODER" == mplayer ]]; then
     which mplayer >/dev/null 2>&1 || halt "Please install \"mplayer\""
 fi
 
@@ -275,7 +275,7 @@ process_audio() {
 
     for track in ../src/audio*; do
         if [ $DRC -eq 1 ]; then
-            echo "Applying Dynamic Range Compression (DRC) with ffmpeg-normalize v$(app_ver_short ffmpeg-normalize)"
+            echo "Applying DRC with ffmpeg-normalize v$(app_ver_short ffmpeg-normalize)"
             echo "Arguments: ${FFMPEG_NORMALIZE_ARGS[@]}"
             local sample_rate=$(get_sample_rate_from_file "$track")
             NO_COLOR=1 ffmpeg-normalize "$track" -ar $sample_rate -c:a flac -v \
@@ -283,11 +283,32 @@ process_audio() {
             mv -f norm.flac "$track"
         fi
 
-        echo "Encoding audio track with opusenc v$(app_ver_short opusenc)"
-        echo "Arguments: ${OPUSENC_ARGS[@]}"
-        mplayer "$track" -noconsolecontrols -really-quiet -vo null \
-            -ao pcm:fast:file=/dev/stdout -af format=s16le | \
-            opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+        if [[ "$AUDIO_DECODER" == ffmpeg ]]; then
+            echo "Using decoder: ffmpeg v$(app_ver_short ffmpeg)"
+            echo "Arguments: ${FFMPEG_AUDIO_ARGS[@]}"
+            echo "Using encoder: opusenc v$(app_ver_short opusenc)"
+            echo "Arguments: ${OPUSENC_ARGS[@]}"
+            ffmpeg -loglevel quiet -i "$track" -f wav "${FFMPEG_AUDIO_ARGS[@]}" - | \
+                opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+        elif [[ "$AUDIO_DECODER" == mpv ]]; then
+            echo "Using decoder: mpv v$(app_ver_short mpv)"
+            echo "Arguments: ${MPV_AUDIO_ARGS[@]}"
+            echo "Using encoder: opusenc v$(app_ver_short opusenc)"
+            echo "Arguments: ${OPUSENC_ARGS[@]}"
+            mpv --no-video --ao=pcm --ao-pcm-waveheader=yes \
+                --ao-pcm-file=/dev/stdout "$track" --no-input-cursor \
+                --really-quiet --no-input-default-bindings \
+                --input-vo-keyboard=no "${MPV_AUDIO_ARGS[@]}" | \
+                opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+        elif [[ "$AUDIO_DECODER" == mplayer ]]; then
+            echo "Using decoder: mplayer v$(app_ver_short mplayer)"
+            echo "Arguments: ${MPLAYER_AUDIO_ARGS[@]}"
+            echo "Using encoder: opusenc v$(app_ver_short opusenc)"
+            echo "Arguments: ${OPUSENC_ARGS[@]}"
+            mplayer -noconsolecontrols -really-quiet -vo null \
+                -ao pcm:fast:file=/dev/stdout "${MPLAYER_AUDIO_ARGS[@]}" "$track" | \
+                opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+        fi
     done
 }
 
@@ -304,7 +325,7 @@ process_video() {
         local fps=$((1000000000 / $(echo "$ss_info" | jq -r "$jq_s")))
         echo "Video track source resolution: $resolution"
 
-        if [[ "$DECODER" == vspipe ]]; then
+        if [[ "$VIDEO_DECODER" == vspipe ]]; then
             echo "Preparing Vapoursynth script \"$VPY_FILE\""
             echo "$VAPOURSYNTH_TPL" > "$TMPDIR/$VPY_FILE"
             sed -i "s/%%INPUT_STREAM%%/src\/$(basename $track)/g" "$TMPDIR/$VPY_FILE"
@@ -312,27 +333,32 @@ process_video() {
             sed -i "s/%%VIDEO_HEIGHT%%/$height/g" "$TMPDIR/$VPY_FILE"
         fi
 
-        echo "Encoding video track with SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-        echo "Arguments: ${SVTENC_ARGS[@]}"
-
-        if [[ "$DECODER" == vspipe ]]; then
+        if [[ "$VIDEO_DECODER" == vspipe ]]; then
             echo "Using decoder: vspipe v$(app_ver_short vspipe)"
+            echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+            echo "Arguments: ${SVTENC_ARGS[@]}"
             vspipe -c y4m "$TMPDIR/$VPY_FILE" - | \
                 SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
-        elif [[ "$DECODER" == ffmpeg ]]; then
-            echo "Using decoder: ffmpeg v$(app_ver_short ffmpeg)"
+        elif [[ "$VIDEO_DECODER" == ffmpeg ]]; then
             local ffmpeg_args=$(echo "${FFMPEG_VIDEO_ARGS[@]}" | \
                 sed "s/%%VIDEO_WIDTH%%/$width/g" | \
                 sed "s/%%VIDEO_HEIGHT%%/$height/g")
+            echo "Using decoder: ffmpeg v$(app_ver_short ffmpeg)"
+            echo "Arguments: $ffmpeg_args"
+            echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+            echo "Arguments: ${SVTENC_ARGS[@]}"
             ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
                 SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
-        elif [[ "$DECODER" == mpv ]]; then
+        elif [[ "$VIDEO_DECODER" == mpv ]]; then
             # MPV has buggy y4m output (fps multiplied by 1000).
             # Use raw video output.
-            echo "Using decoder: mpv v$(app_ver_short mpv)"
             local mpv_args=$(echo "${MPV_VIDEO_ARGS[@]}" | \
                 sed "s/%%VIDEO_WIDTH%%/$width/g" | \
                 sed "s/%%VIDEO_HEIGHT%%/$height/g")
+            echo "Using decoder: mpv v$(app_ver_short mpv)"
+            echo "Arguments: $mpv_args"
+            echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+            echo "Arguments: ${SVTENC_ARGS[@]}"
             local regex='s/.*format=\([[:alnum:]]*\).*/\1/p'
             local pix_fmt=$(echo "$mpv_args" | sed -n "$regex")
             if [[ "$pix_fmt" == yuv420p ]]; then
@@ -347,12 +373,15 @@ process_video() {
                 $mpv_args --of=rawvideo "$track" | \
                 SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin \
                     -w $width -h $height --input-depth $depth --fps $fps
-        elif [[ "$DECODER" == mplayer ]]; then
+        elif [[ "$VIDEO_DECODER" == mplayer ]]; then
             # MPlayer only supports 8-bit y4m output and no raw video output.
-            echo "Using decoder: mplayer v$(app_ver_short mplayer)"
             local mplayer_args=$(echo "${MPLAYER_VIDEO_ARGS[@]}" | \
                 sed "s/%%VIDEO_WIDTH%%/$width/g" | \
                 sed "s/%%VIDEO_HEIGHT%%/$height/g")
+            echo "Using decoder: mplayer v$(app_ver_short mplayer)"
+            echo "Arguments: $mplayer_args"
+            echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+            echo "Arguments: ${SVTENC_ARGS[@]}"
             mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
                 -really-quiet $mplayer_args "$track" | \
                 SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
