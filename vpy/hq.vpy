@@ -10,5 +10,5 @@ core = vs.core
 core.num_threads = 1
 clip = core.bs.VideoSource(source='%%INPUT_STREAM%%')
 
-clip = core.resize.Spline36(clip, %%VIDEO_WIDTH%%, %%VIDEO_HEIGHT%%, format=vs.YUV420P10, matrix=1)
+clip = core.resize.Spline36(clip, %%VIDEO_WIDTH%%, %%VIDEO_HEIGHT%%, format=vs.YUV420P10, matrix_in_s="709")
 clip.set_output()

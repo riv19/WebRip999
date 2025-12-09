@@ -29,7 +29,7 @@ clip = core.bs.VideoSource(source='%%INPUT_STREAM%%')
 orig_num_frames = clip.num_frames
 
 clip = NNEDI3(opencl=True).antialias(clip, direction=AntiAliaser.AADirection.VERTICAL)
-clip = core.resize.Bicubic(clip, format=vs.YUV420P10, matrix=1)
+clip = core.resize.Spline36(clip, format=vs.YUV420P10, matrix_in_s="709")
 
 bright = 32
 cont = 0.80
@@ -138,7 +138,7 @@ clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grain
 
 # ----- Resize
 
-clip = core.resize.Spline36(clip, %%VIDEO_WIDTH%%, %%VIDEO_HEIGHT%%)
+clip = core.resize.Bicubic(clip, %%VIDEO_WIDTH%%, %%VIDEO_HEIGHT%%)
 
 # Verify that resulting clip has exactly the same length
 assert orig_num_frames == clip.num_frames
