@@ -29,11 +29,24 @@ which SvtAv1EncApp >/dev/null 2>&1 || halt "Please install \"svt-av1\""
 which opusenc >/dev/null 2>&1 || halt "Please install \"opus-tools\""
 which mkvmerge >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 which mkvpropedit >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
-which mplayer >/dev/null 2>&1 || halt "Please install \"mplayer\""
-[ "$VAPOURSYNTH" -eq 0 ] || which vspipe >/dev/null 2>&1 || \
-    halt "Please install \"vapoursynth\""
-[ "$DRC" -eq 0 ] || which ffmpeg-normalize >/dev/null 2>&1 || \
-    halt "Please install \"ffmpeg-normalize\""
+
+if [[ "$DECODER" == vspipe ]]; then
+    which vspipe >/dev/null 2>&1 || halt "Please install \"vapoursynth\""
+fi
+if [[ "$DECODER" == ffmpeg ]]; then
+    which ffmpeg >/dev/null 2>&1 || halt "Please install \"ffmpeg\""
+fi
+if [[ "$DECODER" == mpv ]]; then
+    which mpv >/dev/null 2>&1 || halt "Please install \"mpv\""
+fi
+if [[ "$DECODER" == mplayer ]]; then
+    which mplayer >/dev/null 2>&1 || halt "Please install \"mplayer\""
+fi
+
+if [ "$DRC" -eq 1 ]; then
+    which ffmpeg-normalize >/dev/null 2>&1 || \
+        halt "Please install \"ffmpeg-normalize\""
+fi
 
 # --- PREREQUISITES END
 
@@ -90,7 +103,7 @@ human_size_from_file() {
 
 app_ver_short() {
     local out
-    out="$("$1" --version 2>/dev/null || "$1" -V 2>/dev/null || "$1" -v 2>/dev/null)"
+    out="$("$1" --version 2>/dev/null || "$1" -V 2>/dev/null || "$1" -v 2>/dev/null || "$1" -version 2>/dev/null)"
     echo "$out" | grep -oE '[0-9]+(\.[0-9]+){1,3}' | head -n1
 }
 
@@ -134,17 +147,6 @@ get_sample_rate_from_file() {
 
     # No match — echo empty
     echo ""
-}
-
-get_video_resolution_from_file() {
-    local filepath="$1"
-    local info resolution
-
-    info=$(file "$filepath")
-    local regex='s/.* \([0-9]\+x[0-9]\+\).*/\1/p'
-    resolution=$(echo "$info" | sed -n "$regex")
-
-    echo "$resolution"
 }
 
 calc_resolution() {
@@ -295,18 +297,18 @@ process_video() {
     echo "$STEP.) Processing video"
 
     for track in ../src/video*; do
-        local resolution=$(get_video_resolution_from_file "$track")
-        if [ -z "$resolution" ]; then
-            jq_s=".tracks[] | select(.id == 1) | .properties.pixel_dimensions"
-            resolution=$(cat ../src/source_info | jq -r "$jq_s")
-        fi
+        local ss_info=$(cat ../src/source_info)
+        local jq_s=".tracks[] | select(.id == 1) | .properties.pixel_dimensions"
+        local resolution=$(echo "$ss_info" | jq -r "$jq_s")
         local width=$(echo "$resolution" | cut -d'x' -f1)
         local height=$(echo "$resolution" | cut -d'x' -f2)
+        local jq_s=".tracks[] | select(.id == 1) | .properties.default_duration"
+        local fps=$((1000000000 / $(echo "$ss_info" | jq -r "$jq_s")))
         echo "Video track source resolution: $resolution"
 
-        if [ $VAPOURSYNTH -eq 1 ]; then
+        if [[ "$DECODER" == vspipe ]]; then
             echo "Preparing Vapoursynth script \"$VPY_FILE\""
-            echo "$VAPOUR_SYNTH_TPL" > "$TMPDIR/$VPY_FILE"
+            echo "$VAPOURSYNTH_TPL" > "$TMPDIR/$VPY_FILE"
             sed -i "s/%%INPUT_STREAM%%/src\/$(basename $track)/g" "$TMPDIR/$VPY_FILE"
             sed -i "s/%%VIDEO_WIDTH%%/$width/g" "$TMPDIR/$VPY_FILE"
             sed -i "s/%%VIDEO_HEIGHT%%/$height/g" "$TMPDIR/$VPY_FILE"
@@ -315,17 +317,49 @@ process_video() {
         echo "Encoding video track with SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
         echo "Arguments: ${SVTENC_ARGS[@]}"
 
-        if [ $VAPOURSYNTH -eq 1 ]; then
-            vspipe -c y4m "$TMPDIR/$VPY_FILE" - | SvtAv1EncApp "${SVTENC_ARGS[@]}" \
-                -b $(basename $track) -i stdin
-        else
+        if [[ "$DECODER" == vspipe ]]; then
+            echo "Using decoder: vspipe v$(app_ver_short vspipe)"
+            vspipe -c y4m "$TMPDIR/$VPY_FILE" - | \
+                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
+        elif [[ "$DECODER" == ffmpeg ]]; then
+            echo "Using decoder: ffmpeg v$(app_ver_short ffmpeg)"
+            local ffmpeg_args=$(echo "${FFMPEG_VIDEO_ARGS[@]}" | \
+                sed "s/%%VIDEO_WIDTH%%/$width/g" | \
+                sed "s/%%VIDEO_HEIGHT%%/$height/g")
+            ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
+                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
+        elif [[ "$DECODER" == mpv ]]; then
+            # MPV has buggy y4m output (fps multiplied by 1000).
+            # Use raw video output.
+            echo "Using decoder: mpv v$(app_ver_short mpv)"
+            local mpv_args=$(echo "${MPV_VIDEO_ARGS[@]}" | \
+                sed "s/%%VIDEO_WIDTH%%/$width/g" | \
+                sed "s/%%VIDEO_HEIGHT%%/$height/g")
+            local regex='s/.*format=\([[:alnum:]]*\).*/\1/p'
+            local pix_fmt=$(echo "$mpv_args" | sed -n "$regex")
+            if [[ "$pix_fmt" == yuv420p ]]; then
+                local depth=8
+            elif [[ "$pix_fmt" == yuv420p10le ]]; then
+                local depth=10
+            else
+                halt "Unsupported pixel format. Check mpv options."
+            fi
+            mpv --no-audio --o=- --no-input-cursor --really-quiet \
+                --no-input-default-bindings --input-vo-keyboard=no \
+                $mpv_args --of=rawvideo "$track" | \
+                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin \
+                    -w $width -h $height --input-depth $depth --fps $fps
+        elif [[ "$DECODER" == mplayer ]]; then
+            # MPlayer only supports 8-bit y4m output and no raw video output.
+            echo "Using decoder: mplayer v$(app_ver_short mplayer)"
             local mplayer_args=$(echo "${MPLAYER_VIDEO_ARGS[@]}" | \
                 sed "s/%%VIDEO_WIDTH%%/$width/g" | \
                 sed "s/%%VIDEO_HEIGHT%%/$height/g")
-            mplayer "$track" -noconsolecontrols -really-quiet \
-                $mplayer_args -vo yuv4mpeg:file=/dev/stdout \
-                -ao null | SvtAv1EncApp "${SVTENC_ARGS[@]}" \
-                -b $(basename $track) -i stdin
+            mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
+                -really-quiet $mplayer_args "$track" | \
+                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
+        else
+            halt "Unsupported decoder specified"
         fi
     done
 }
