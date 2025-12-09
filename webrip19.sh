@@ -316,12 +316,14 @@ process_video() {
     echo "$STEP.) Processing video"
 
     for track in ../src/video*; do
+        local regex='s/.*video\([0-9]*\)/\1/p'
+        local track_id=$(echo "$track" | sed -n "$regex")
         local ss_info=$(cat ../src/source_info)
-        local jq_s=".tracks[] | select(.id == 1) | .properties.pixel_dimensions"
+        local jq_s=".tracks[] | select(.id == $track_id) | .properties.pixel_dimensions"
         local resolution=$(echo "$ss_info" | jq -r "$jq_s")
         local width=$(echo "$resolution" | cut -d'x' -f1)
         local height=$(echo "$resolution" | cut -d'x' -f2)
-        local jq_s=".tracks[] | select(.id == 1) | .properties.default_duration"
+        local jq_s=".tracks[] | select(.id == $track_id) | .properties.default_duration"
         local fps=$((1000000000 / $(echo "$ss_info" | jq -r "$jq_s")))
         echo "Video track source resolution: $resolution"
 
