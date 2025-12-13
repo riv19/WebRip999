@@ -288,6 +288,12 @@ process_audio() {
             mv -f norm.flac "$track"
         fi
 
+        if [[ "$AUDIO_ENCODER" == copy ]]; then
+            echo "Skipping re-encoding: \"copy\" encoder specified"
+            ln -sL "$track" $(basename $track)
+            return
+        fi
+
         if [[ "$AUDIO_DECODER" == vspipe ]]; then
             echo "Using decoder: vspipe v$(app_ver_short vspipe)"
             echo "Preparing VapourSynth script \"$VAPOURSYNTH_AUDIO_SCRIPT\""
@@ -295,38 +301,50 @@ process_audio() {
                 "$TMPDIR/$AUDIO_VPY_TMP_FILE"
             sed -i "s/%%INPUT_STREAM%%/src\/$(basename $track)/g" \
                 "$TMPDIR/$AUDIO_VPY_TMP_FILE"
-            echo "Using encoder: opusenc v$(app_ver_short opusenc)"
-            echo "Arguments: ${OPUSENC_ARGS[@]}"
-            vspipe -c wav "$TMPDIR/$AUDIO_VPY_TMP_FILE" - | \
-                opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+
+            if [[ "$AUDIO_ENCODER" == opusenc ]]; then
+                echo "Using encoder: opusenc v$(app_ver_short opusenc)"
+                echo "Arguments: ${OPUSENC_ARGS[@]}"
+                vspipe -c wav "$TMPDIR/$AUDIO_VPY_TMP_FILE" - | \
+                    opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+            fi
 
         elif [[ "$AUDIO_DECODER" == ffmpeg ]]; then
             echo "Using decoder: ffmpeg v$(app_ver_short ffmpeg)"
             echo "Arguments: ${FFMPEG_AUDIO_ARGS[@]}"
-            echo "Using encoder: opusenc v$(app_ver_short opusenc)"
-            echo "Arguments: ${OPUSENC_ARGS[@]}"
-            ffmpeg -loglevel quiet -i "$track" -f wav "${FFMPEG_AUDIO_ARGS[@]}" - | \
-                opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+
+            if [[ "$AUDIO_ENCODER" == opusenc ]]; then
+                echo "Using encoder: opusenc v$(app_ver_short opusenc)"
+                echo "Arguments: ${OPUSENC_ARGS[@]}"
+                ffmpeg -loglevel quiet -i "$track" -f wav "${FFMPEG_AUDIO_ARGS[@]}" - | \
+                    opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+            fi
 
         elif [[ "$AUDIO_DECODER" == mpv ]]; then
             echo "Using decoder: mpv v$(app_ver_short mpv)"
             echo "Arguments: ${MPV_AUDIO_ARGS[@]}"
-            echo "Using encoder: opusenc v$(app_ver_short opusenc)"
-            echo "Arguments: ${OPUSENC_ARGS[@]}"
-            mpv --no-video --ao=pcm --ao-pcm-waveheader=yes \
-                --ao-pcm-file=/dev/stdout "$track" --no-input-cursor \
-                --really-quiet --no-input-default-bindings \
-                --input-vo-keyboard=no "${MPV_AUDIO_ARGS[@]}" | \
-                opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+
+            if [[ "$AUDIO_ENCODER" == opusenc ]]; then
+                echo "Using encoder: opusenc v$(app_ver_short opusenc)"
+                echo "Arguments: ${OPUSENC_ARGS[@]}"
+                mpv --no-video --ao=pcm --ao-pcm-waveheader=yes \
+                    --ao-pcm-file=/dev/stdout "$track" --no-input-cursor \
+                    --really-quiet --no-input-default-bindings \
+                    --input-vo-keyboard=no "${MPV_AUDIO_ARGS[@]}" | \
+                    opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+            fi
 
         elif [[ "$AUDIO_DECODER" == mplayer ]]; then
             echo "Using decoder: mplayer v$(app_ver_short mplayer)"
             echo "Arguments: ${MPLAYER_AUDIO_ARGS[@]}"
-            echo "Using encoder: opusenc v$(app_ver_short opusenc)"
-            echo "Arguments: ${OPUSENC_ARGS[@]}"
-            mplayer -noconsolecontrols -really-quiet -vo null \
-                -ao pcm:fast:file=/dev/stdout "${MPLAYER_AUDIO_ARGS[@]}" "$track" | \
-                opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+
+            if [[ "$AUDIO_ENCODER" == opusenc ]]; then
+                echo "Using encoder: opusenc v$(app_ver_short opusenc)"
+                echo "Arguments: ${OPUSENC_ARGS[@]}"
+                mplayer -noconsolecontrols -really-quiet -vo null \
+                    -ao pcm:fast:file=/dev/stdout "${MPLAYER_AUDIO_ARGS[@]}" "$track" | \
+                    opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+            fi
         fi
     done
 }
@@ -344,6 +362,13 @@ process_video() {
         local height=$(echo "$resolution" | cut -d'x' -f2)
         local jq_s=".tracks[] | select(.id == $track_id) | .properties.default_duration"
         local fps=$((1000000000 / $(echo "$ss_info" | jq -r "$jq_s")))
+
+        if [[ "$VIDEO_ENCODER" == copy ]]; then
+            echo "Skipping re-encoding: \"copy\" encoder specified"
+            ln -sL "$track" $(basename $track)
+            return
+        fi
+
         echo "Video track source resolution: $resolution"
 
         if [[ "$VIDEO_DECODER" == vspipe ]]; then
@@ -355,10 +380,13 @@ process_video() {
                 "$TMPDIR/$VIDEO_VPY_TMP_FILE"
             sed -i "s/%%VIDEO_WIDTH%%/$width/g" "$TMPDIR/$VIDEO_VPY_TMP_FILE"
             sed -i "s/%%VIDEO_HEIGHT%%/$height/g" "$TMPDIR/$VIDEO_VPY_TMP_FILE"
-            echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-            echo "Arguments: ${SVTENC_ARGS[@]}"
-            vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
-                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
+
+            if [[ "$VIDEO_ENCODER" == svt_av1 ]]; then
+                echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+                echo "Arguments: ${SVT_AV1_ARGS[@]}"
+                vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
+                    SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+            fi
 
         elif [[ "$VIDEO_DECODER" == ffmpeg ]]; then
             local ffmpeg_args=$(echo "${FFMPEG_VIDEO_ARGS[@]}" | \
@@ -366,10 +394,13 @@ process_video() {
                 sed "s/%%VIDEO_HEIGHT%%/$height/g")
             echo "Using decoder: ffmpeg v$(app_ver_short ffmpeg)"
             echo "Arguments: $ffmpeg_args"
-            echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-            echo "Arguments: ${SVTENC_ARGS[@]}"
-            ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
-                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
+
+            if [[ "$VIDEO_ENCODER" == svt_av1 ]]; then
+                echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+                echo "Arguments: ${SVT_AV1_ARGS[@]}"
+                ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
+                    SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+            fi
 
         elif [[ "$VIDEO_DECODER" == mpv ]]; then
             # MPV has buggy y4m output (fps multiplied by 1000).
@@ -379,8 +410,6 @@ process_video() {
                 sed "s/%%VIDEO_HEIGHT%%/$height/g")
             echo "Using decoder: mpv v$(app_ver_short mpv)"
             echo "Arguments: $mpv_args"
-            echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-            echo "Arguments: ${SVTENC_ARGS[@]}"
             local regex='s/.*format=\([[:alnum:]]*\).*/\1/p'
             local pix_fmt=$(echo "$mpv_args" | sed -n "$regex")
             if [[ "$pix_fmt" == yuv420p ]]; then
@@ -390,11 +419,17 @@ process_video() {
             else
                 halt "Unsupported pixel format. Check mpv options."
             fi
-            mpv --no-audio --o=- --no-input-cursor --really-quiet \
-                --no-input-default-bindings --input-vo-keyboard=no \
-                $mpv_args --of=rawvideo "$track" | \
-                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin \
-                    -w $width -h $height --input-depth $depth --fps $fps
+
+            if [[ "$VIDEO_ENCODER" == svt_av1 ]]; then
+                local -n args="${VIDEO_ENCODER}_ARGS"
+                echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+                echo "Arguments: ${SVT_AV1_ARGS[@]}"
+                mpv --no-audio --o=- --no-input-cursor --really-quiet \
+                    --no-input-default-bindings --input-vo-keyboard=no \
+                    $mpv_args --of=rawvideo "$track" | \
+                    SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin \
+                        -w $width -h $height --input-depth $depth --fps $fps
+            fi
 
         elif [[ "$VIDEO_DECODER" == mplayer ]]; then
             # MPlayer only supports 8-bit y4m output and no raw video output.
@@ -403,12 +438,14 @@ process_video() {
                 sed "s/%%VIDEO_HEIGHT%%/$height/g")
             echo "Using decoder: mplayer v$(app_ver_short mplayer)"
             echo "Arguments: $mplayer_args"
-            echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-            echo "Arguments: ${SVTENC_ARGS[@]}"
-            mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
-                -really-quiet $mplayer_args "$track" | \
-                SvtAv1EncApp "${SVTENC_ARGS[@]}" -b $(basename $track) -i stdin
 
+            if [[ "$VIDEO_ENCODER" == svt_av1 ]]; then
+                echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
+                echo "Arguments: ${SVT_AV1_ARGS[@]}"
+                mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
+                    -really-quiet $mplayer_args "$track" | \
+                    SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+            fi
         else
             halt "Unsupported decoder specified"
         fi

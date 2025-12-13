@@ -8,7 +8,6 @@ container.
 
 TODO:
 
-1. Copy audio/video stream by setting an option, without transcoding.
 2. dvd:// URL support
 3. Other encoders support.
 
