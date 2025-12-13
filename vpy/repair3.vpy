@@ -2,7 +2,7 @@
 #   effect on movement. QTGMC does not remove all combing in this case, NNEDI
 #   anti-aliaser does.
 # * Remove over-saturation by adjusting brightness/contrast only to specified
-#   frame ranges - edit the arrays below.
+#   frame ranges and in speficied areas for some frames - edit the arrays below.
 # * Apply deblock and deband for low-bitrate yuv420p8 material.
 # * Resize to resolution specified in VIDEO_WIDTH and VIDEO_HEIGHT.
 # * yuv420p10 output.
@@ -17,6 +17,7 @@
 # vapoursynth-plugin-neo_f3kdb
 # ?
 
+import functools
 import vapoursynth as vs
 import adjust as adj
 from vsaa.deinterlacers import AntiAliaser
@@ -32,6 +33,41 @@ clip = core.resize.Spline36(clip, format=vs.YUV420P10, matrix_in_s="709")
 
 bright = 0
 cont = 0.90
+
+# ----- Apply brightness/contrast in specific areas per frame
+
+# Format: frame_number: (x, y, w, h)
+tweak_regions = {
+    437: (0, 0, 208, 1080),
+    438: (0, 0, 208, 1080),
+    439: (0, 0, 542, 1080),
+    440: (0, 0, 854, 1080),
+    441: (0, 0, 1142, 1080),
+    442: (0, 0, 1398, 1080),
+    443: (0, 0, 1618, 1080),
+    444: (0, 0, 1618, 1080),
+    445: (0, 0, 1792, 1080),
+}
+
+# Function: apply filter only to given rectangle
+def apply_filter(clip, n, x, y, w, h):
+    mask = core.std.BlankClip(clip, width=w, height=h, length=1, color=[1023, 1023, 1023])
+    mask = core.std.AddBorders(mask, 0, clip.width - w, clip.height - h, color=[0, 0, 0])
+    frame = adj.Tweak(clip[n], bright=bright, cont=cont)
+    #frame = core.std.BlankClip(clip, length=1, color=[304, 340, 1020]) # reference
+
+    return core.std.MaskedMerge(clip[n], frame, mask)
+
+# FrameEval: dynamically select which frames to modify
+def process_frame(n, clip):
+    if n in tweak_regions:
+        x, y, w, h = tweak_regions[n]
+        return apply_filter(clip, n, x, y, w, h)
+    else:
+        return clip
+
+# Apply per-frame logic dynamically
+clip = core.std.FrameEval(clip, functools.partial(process_frame, clip=clip))
 
 # ----- Apply brightness/contrast per frame ranges
 
@@ -54,42 +90,31 @@ def inverse_ranges(total_start, total_end, used_ranges):
 
 # (start, end) (not inclusive, `end` is the stop frame)
 tweak_ranges = [
-    (0,      5685),
-    (20118,  22277),
-    (24585,  26007),
-    (26215,  27364),
-    (27389,  27394),
-    (30817,  33506),
-    (33952,  34267),
-    (34731,  37587),
-    (40500,  42469),
-    (42888,  43339),
-    (43461,  44725),
-    (45819,  47484),
-    (47766,  48002),
-    (48027,  49620),
-    (51177,  51190),
-    (51291,  51842),
-    (51861,  57062),
-    (57554,  57845),
-    (58029,  60019),
-    (60221,  63339),
-    (63689,  65102),
-    (66962,  68727),
-    (68871,  69743),
-    (71552,  72053),
-    (72214,  75879),
-    (76298,  77224),
-    (77426,  78156),
-    (79182,  79667),
-    (80015,  80393),
-    (80691,  81579),
-    (81672,  84090),
-    (84617,  84794),
-    (85325,  87573),
-    (90603,  93941),
-    (94477,  97651),
-    (103072, 105509)
+    (446,     9982),
+    (11746,   17205),
+    (17312,   17811),
+    (18969,   19593),
+    (20807,   21110),
+    (22400,   22879),
+    (23847,   24277),
+    (27625,   28814),
+    (28971,   32096),
+    (34256,   36839),
+    (37215,   39448),
+    (39771,   42437),
+    (43220,   45988),
+    (47102,   53524),
+    (53805,   54380),
+    (55472,   55888),
+    (56467,   57993),
+    (59084,   61409),
+    (62415,   63297),
+    (63592,   65903),
+    (67186,   72344),
+    (89931,   97934),
+    (98231,   112563),
+    (113601,  117741),
+    (119206,  123241),
 ]
 
 total = (0, clip.num_frames)
@@ -109,12 +134,12 @@ clip = core.std.Splice(clips, mismatch=False)
 # ----- Deblock, deband, etc.
 
 clip = core.deblock.Deblock(clip, quant=20, aoffset=0, boffset=0)
-clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grainc=0)
+clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grainc=0, opt=0)
 
 # ----- Resize
 
 clip = core.resize.Bicubic(clip, %%VIDEO_WIDTH%%, %%VIDEO_HEIGHT%%)
 
 # Verify that resulting clip has exactly the same length
-assert old_num_frames == new_num_frames
+assert orig_num_frames == clip.num_frames
 clip.set_output()

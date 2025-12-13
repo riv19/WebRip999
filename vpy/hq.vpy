@@ -1,5 +1,6 @@
 # Simple script for high quality video - no heavy filtering required.
-# Resize to 720p YUV420P10.
+# * Resize to resolution specified in VIDEO_WIDTH and VIDEO_HEIGHT.
+# * yuv420p10 output.
 
 # Prerequisites (assuming Arch Linux):
 # vapoursynth-plugin-bestsource
