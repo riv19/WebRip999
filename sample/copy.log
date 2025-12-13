@@ -1,0 +1,91 @@
+::: Processing stream 1 of 2: http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+
+0.) Retrieving files (yt-dlp)
+[generic] Extracting URL: http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+[generic] BigBuckBunny: Downloading webpage
+[info] BigBuckBunny: Downloading 1 format(s): mp4
+[info] There's no video description to write
+[info] There are no subtitles for the requested languages
+[info] There are no video thumbnails to download
+[info] Writing video metadata as JSON to: BigBuckBunny [BigBuckBunny].info.json
+[ThumbnailsConvertor] There aren't any thumbnails to convert
+[download] Destination: BigBuckBunny [BigBuckBunny].mp4
+[download] 100% of  150.69MiB in 00:01:36 at 1.56MiB/s
+[VideoRemuxer] Remuxing video from mp4 to mkv; Destination: BigBuckBunny [BigBuckBunny].mkv
+Deleting original file BigBuckBunny [BigBuckBunny].mp4 (pass -k to keep)
+[Metadata] There isn't any metadata to add
+
+* Source file: "BigBuckBunny [BigBuckBunny].mkv"
+* File size: 150MB (158120900 bytes)
+
+1.) Extracting tracks
+Source audio (id 0) stream info:
+{
+  "audio_bits_per_sample": 32,
+  "audio_channels": 2,
+  "audio_sampling_frequency": 44100,
+  "codec_id": "A_AAC",
+  "codec_private_data": "1210",
+  "codec_private_length": 2,
+  "default_track": true,
+  "enabled_track": true,
+  "forced_track": false,
+  "language": "und",
+  "minimum_timestamp": 0,
+  "num_index_entries": 0,
+  "number": 1,
+  "tag_duration": "00:09:56.474000000",
+  "tag_handler_name": "(C) 2007 Google Inc. v08.13.2007.",
+  "tag_vendor_id": "[0][0][0][0]",
+  "uid": 9443822404613262577
+}
+Source video (id 1) stream info:
+{
+  "chroma_siting": "1,2",
+  "codec_id": "V_MPEG4/ISO/AVC",
+  "codec_private_data": "0164001fffe100196764001fac2484014016ec0440000003004000000c23c60c9201000568ee32c8b0",
+  "codec_private_length": 41,
+  "default_duration": 41666666,
+  "default_track": true,
+  "display_dimensions": "1280x720",
+  "display_unit": 0,
+  "enabled_track": true,
+  "forced_track": false,
+  "language": "und",
+  "minimum_timestamp": 0,
+  "num_index_entries": 266,
+  "number": 2,
+  "packetizer": "mpeg4_p10_video",
+  "pixel_dimensions": "1280x720",
+  "tag_duration": "00:09:56.459000000",
+  "tag_handler_name": "(C) 2007 Google Inc. v08.13.2007.",
+  "tag_vendor_id": "[0][0][0][0]",
+  "uid": 14230479414338755959
+}
+Extracting track 0 with the CodecID 'A_AAC' to the file 'audio0'. Container format: raw AAC file with ADTS headers
+Progress: 100%
+Extracting track 1 with the CodecID 'V_MPEG4/ISO/AVC' to the file 'video1'. Container format: AVC/H.264 elementary stream
+Progress: 100%
+
+2.) Processing cover image
+No cover image in source stream
+
+3.) Processing audio
+Skipping re-encoding: "copy" encoder specified
+
+4.) Processing video
+Skipping re-encoding: "copy" encoder specified
+
+5.) Merging files
+mkvmerge v96.0 ('It's My Life') 64-bit
+'video1': Using the demultiplexer for the format 'AVC/H.264'.
+'audio0': Using the demultiplexer for the format 'AAC'.
+'video1' track 0: Using the output module for the format 'AVC/H.264 (unframed)'.
+'audio0' track 0: Using the output module for the format 'AAC'.
+The file 'output_stream' has been opened for writing.
+'video1' track 0: Extracted the aspect ratio information from the video bitstream and set the display dimensions to 1280/720.
+The cue entries (the index) are being written...
+Multiplexing took 1 second.
+
+* Resulting file size (without attachments): 150MB (157997325 bytes)
+
