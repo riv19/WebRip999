@@ -381,11 +381,18 @@ process_video() {
             sed -i "s/%%VIDEO_WIDTH%%/$width/g" "$TMPDIR/$VIDEO_VPY_TMP_FILE"
             sed -i "s/%%VIDEO_HEIGHT%%/$height/g" "$TMPDIR/$VIDEO_VPY_TMP_FILE"
 
-            if [[ "$VIDEO_ENCODER" == svt_av1 ]]; then
+            if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
                 echo "Arguments: ${SVT_AV1_ARGS[@]}"
                 vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
                     SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+
+            elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
+                echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
+                echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
+                vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
+                    ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
+                        $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == ffmpeg ]]; then
@@ -395,11 +402,18 @@ process_video() {
             echo "Using decoder: ffmpeg v$(app_ver_short ffmpeg)"
             echo "Arguments: $ffmpeg_args"
 
-            if [[ "$VIDEO_ENCODER" == svt_av1 ]]; then
+            if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
                 echo "Arguments: ${SVT_AV1_ARGS[@]}"
                 ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
                     SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+
+            elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
+                echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
+                echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
+                ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
+                    ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
+                    $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == mpv ]]; then
@@ -420,7 +434,7 @@ process_video() {
                 halt "Unsupported pixel format. Check mpv options."
             fi
 
-            if [[ "$VIDEO_ENCODER" == svt_av1 ]]; then
+            if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 local -n args="${VIDEO_ENCODER}_ARGS"
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
                 echo "Arguments: ${SVT_AV1_ARGS[@]}"
@@ -429,6 +443,16 @@ process_video() {
                     $mpv_args --of=rawvideo "$track" | \
                     SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin \
                         -w $width -h $height --input-depth $depth --fps $fps
+
+            elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
+                echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
+                echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
+                mpv --no-audio --o=- --no-input-cursor --really-quiet \
+                    --no-input-default-bindings --input-vo-keyboard=no \
+                    $mpv_args --of=rawvideo "$track" | \
+                    ffmpeg -f rawvideo -pix_fmt $pix_fmt -s ${width}:${height} \
+                        -r $fps -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
+                        $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == mplayer ]]; then
@@ -439,13 +463,22 @@ process_video() {
             echo "Using decoder: mplayer v$(app_ver_short mplayer)"
             echo "Arguments: $mplayer_args"
 
-            if [[ "$VIDEO_ENCODER" == svt_av1 ]]; then
+            if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
                 echo "Arguments: ${SVT_AV1_ARGS[@]}"
                 mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
                     -really-quiet $mplayer_args "$track" | \
                     SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+
+            elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
+                echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
+                echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
+                mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
+                    -really-quiet $mplayer_args "$track" | \
+                    ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
+                        $(basename $track)
             fi
+
         else
             halt "Unsupported decoder specified"
         fi
