@@ -181,11 +181,13 @@ retrieve_stream_yt_dlp() {
         echo "$stream" > source_url
     fi
 
-    local size_bytes=$(size_bytes_from_file *.mkv)
-    local human_size=$(human_size_from_file *.mkv)
+    local input_stream=$(ls *.mkv)
+    local size_bytes=$(size_bytes_from_file "$input_stream")
+    local human_size=$(human_size_from_file "$input_stream")
 
     echo
-    echo "* Source file size: $human_size ($size_bytes bytes)"
+    echo "* Source file: \"$input_stream\""
+    echo "* File size: $human_size ($size_bytes bytes)"
 }
 
 retrieve_stream_local() {
