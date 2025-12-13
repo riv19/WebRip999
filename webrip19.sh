@@ -392,7 +392,7 @@ process_video() {
                 echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
                 vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
                     ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
-                        $(basename $track)
+                        -stats_period 10 $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == ffmpeg ]]; then
@@ -413,7 +413,7 @@ process_video() {
                 echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
                 ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
                     ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
-                    $(basename $track)
+                    -stats_period 10 $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == mpv ]]; then
@@ -452,7 +452,7 @@ process_video() {
                     $mpv_args --of=rawvideo "$track" | \
                     ffmpeg -f rawvideo -pix_fmt $pix_fmt -s ${width}:${height} \
                         -r $fps -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
-                        $(basename $track)
+                        -stats_period 10 $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == mplayer ]]; then
@@ -476,7 +476,7 @@ process_video() {
                 mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
                     -really-quiet $mplayer_args "$track" | \
                     ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
-                        $(basename $track)
+                        -stats_period 10 $(basename $track)
             fi
 
         else
