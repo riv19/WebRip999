@@ -506,6 +506,7 @@ merge_files() {
 
 process_one() {
     local stream="$1"
+    local start_seconds=$(date +%s)
 
     echo "::: Processing stream $STREAM_NUM of $STREAM_COUNT: $stream"
     echo
@@ -555,6 +556,12 @@ process_one() {
     STEP=$((STEP + 1))
     cd "$TMPDIR/dst"
     merge_files
+
+    local end_seconds=$(date +%s)
+    local elapsed=$((end_seconds - start_seconds))
+    printf '* Processing time: %dd %02dh %02dm %02ds\n' \
+        $((elapsed/86400)) $((elapsed%86400/3600)) \
+        $((elapsed%3600/60)) $((elapsed%60))
     echo
 }
 
@@ -636,6 +643,7 @@ main_loop() {
 
         # Process one item, logging console output
         process_one $stream > >(tee -a "$TMPDIR/$LOG_FILE") 2>&1
+        sync
 
         # Squash progress bars in the log
         sed -i 's/.*\r//;:a;s/.\x08//;ta;s/\x08//;s/[[:space:]]\+$//' \
