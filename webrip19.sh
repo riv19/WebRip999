@@ -189,6 +189,7 @@ retrieve_stream_yt_dlp() {
     local human_size=$(human_size_from_file "$input_stream")
 
     echo
+    echo "* Processing date/time: $(date)"
     echo "* Source file: \"$input_stream\""
     echo "* File size: $human_size ($size_bytes bytes)"
 }
