@@ -603,14 +603,18 @@ done
 finalize_stream() {
     local -a edit_args=()
     if [ -f cover ]; then
-        local cover_param="name=cover.avif,mime-type=image/avif"
-        edit_args+=( --add-attachment "$cover_param" cover )
+        edit_args+=( --attachment-name cover.avif \
+                     --attachment-mime-type image/avif \
+                     --add-attachment cover )
     fi
     if [ -f description ]; then
-        local desc_param="name=description.txt,mime-type=text/plain"
-        edit_args+=( --add-attachment "$desc_param" description )
+        edit_args+=( --attachment-name description.txt \
+                     --attachment-mime-type text/plain \
+                     --add-attachment description )
     fi
-    edit_args+=( --add-attachment "../$LOG_FILE" )
+    edit_args+=( --attachment-name "$LOG_FILE" \
+                 --attachment-mime-type text/x-log \
+                 --add-attachment "../$LOG_FILE" )
 
     # Mux tracks into the container
     mkvpropedit output_stream --add-track-statistics-tags \
