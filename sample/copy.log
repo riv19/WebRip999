@@ -10,11 +10,12 @@
 [info] Writing video metadata as JSON to: BigBuckBunny [BigBuckBunny].info.json
 [ThumbnailsConvertor] There aren't any thumbnails to convert
 [download] Destination: BigBuckBunny [BigBuckBunny].mp4
-[download] 100% of  150.69MiB in 00:01:36 at 1.56MiB/s
+[download] 100% of  150.69MiB in 00:01:24 at 1.79MiB/s
 [VideoRemuxer] Remuxing video from mp4 to mkv; Destination: BigBuckBunny [BigBuckBunny].mkv
 Deleting original file BigBuckBunny [BigBuckBunny].mp4 (pass -k to keep)
 [Metadata] There isn't any metadata to add
 
+* Date/time: Sun Dec 14 04:48:25 PM CET 2025
 * Source file: "BigBuckBunny [BigBuckBunny].mkv"
 * File size: 150MB (158120900 bytes)
 
@@ -37,7 +38,7 @@ Source audio (id 0) stream info:
   "tag_duration": "00:09:56.474000000",
   "tag_handler_name": "(C) 2007 Google Inc. v08.13.2007.",
   "tag_vendor_id": "[0][0][0][0]",
-  "uid": 9443822404613262577
+  "uid": 9490890111817704290
 }
 Source video (id 1) stream info:
 {
@@ -60,7 +61,7 @@ Source video (id 1) stream info:
   "tag_duration": "00:09:56.459000000",
   "tag_handler_name": "(C) 2007 Google Inc. v08.13.2007.",
   "tag_vendor_id": "[0][0][0][0]",
-  "uid": 14230479414338755959
+  "uid": 17938511602198860691
 }
 Extracting track 0 with the CodecID 'A_AAC' to the file 'audio0'. Container format: raw AAC file with ADTS headers
 Progress: 100%
@@ -88,4 +89,5 @@ The cue entries (the index) are being written...
 Multiplexing took 1 second.
 
 * Resulting file size (without attachments): 150MB (157997325 bytes)
+* Processing time: 0d 00h 01m 29s
 

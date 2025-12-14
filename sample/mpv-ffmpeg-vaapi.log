@@ -1,0 +1,141 @@
+::: Processing stream 1 of 2: http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+
+0.) Retrieving files (yt-dlp)
+[generic] Extracting URL: http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
+[generic] BigBuckBunny: Downloading webpage
+[info] BigBuckBunny: Downloading 1 format(s): mp4
+[info] There's no video description to write
+[info] There are no subtitles for the requested languages
+[info] There are no video thumbnails to download
+[info] Writing video metadata as JSON to: BigBuckBunny [BigBuckBunny].info.json
+[ThumbnailsConvertor] There aren't any thumbnails to convert
+[download] Destination: BigBuckBunny [BigBuckBunny].mp4
+[download] 100% of  150.69MiB in 00:01:30 at 1.66MiB/s
+[VideoRemuxer] Remuxing video from mp4 to mkv; Destination: BigBuckBunny [BigBuckBunny].mkv
+Deleting original file BigBuckBunny [BigBuckBunny].mp4 (pass -k to keep)
+[Metadata] There isn't any metadata to add
+
+* Date/time: Sun Dec 14 04:39:24 PM CET 2025
+* Source file: "BigBuckBunny [BigBuckBunny].mkv"
+* File size: 150MB (158120900 bytes)
+
+1.) Extracting tracks
+Source audio (id 0) stream info:
+{
+  "audio_bits_per_sample": 32,
+  "audio_channels": 2,
+  "audio_sampling_frequency": 44100,
+  "codec_id": "A_AAC",
+  "codec_private_data": "1210",
+  "codec_private_length": 2,
+  "default_track": true,
+  "enabled_track": true,
+  "forced_track": false,
+  "language": "und",
+  "minimum_timestamp": 0,
+  "num_index_entries": 0,
+  "number": 1,
+  "tag_duration": "00:09:56.474000000",
+  "tag_handler_name": "(C) 2007 Google Inc. v08.13.2007.",
+  "tag_vendor_id": "[0][0][0][0]",
+  "uid": 14835473500962638608
+}
+Source video (id 1) stream info:
+{
+  "chroma_siting": "1,2",
+  "codec_id": "V_MPEG4/ISO/AVC",
+  "codec_private_data": "0164001fffe100196764001fac2484014016ec0440000003004000000c23c60c9201000568ee32c8b0",
+  "codec_private_length": 41,
+  "default_duration": 41666666,
+  "default_track": true,
+  "display_dimensions": "1280x720",
+  "display_unit": 0,
+  "enabled_track": true,
+  "forced_track": false,
+  "language": "und",
+  "minimum_timestamp": 0,
+  "num_index_entries": 266,
+  "number": 2,
+  "packetizer": "mpeg4_p10_video",
+  "pixel_dimensions": "1280x720",
+  "tag_duration": "00:09:56.459000000",
+  "tag_handler_name": "(C) 2007 Google Inc. v08.13.2007.",
+  "tag_vendor_id": "[0][0][0][0]",
+  "uid": 3558976406634438004
+}
+Extracting track 0 with the CodecID 'A_AAC' to the file 'audio0'. Container format: raw AAC file with ADTS headers
+Progress: 100%
+Extracting track 1 with the CodecID 'V_MPEG4/ISO/AVC' to the file 'video1'. Container format: AVC/H.264 elementary stream
+Progress: 100%
+
+2.) Processing cover image
+No cover image in source stream
+
+3.) Processing audio
+Using decoder: mpv v0.40.0
+Arguments: --audio-format=s16
+Using encoder: opusenc v0.2
+Arguments: --bitrate 80
+Encoding using libopus 1.5.2 (audio)
+-----------------------------------------------------
+   Input: 44.1 kHz, 2 channels
+  Output: 2 channels (2 coupled)
+          20ms packets, 80 kbit/s VBR
+ Preskip: 312
+
+Encoding complete
+-----------------------------------------------------
+       Encoded: 9 minutes and 56.5 seconds
+       Runtime: 7 seconds
+                (85.21x realtime)
+         Wrote: 5923341 bytes, 29825 packets, 599 pages
+       Bitrate: 78.7918 kbit/s (without overhead)
+ Instant rates: 1.2 to 160.8 kbit/s
+                (3 to 402 bytes per packet)
+      Overhead: 0.818% (container+metadata)
+
+
+4.) Processing video
+Video track source resolution: 1280x720
+Using decoder: mpv v0.40.0
+Arguments: --vf=scale=1280:720 --vf=format=yuv420p10le
+Using encoder: ffmpeg v8.0.1
+Arguments: -vaapi_device /dev/dri/renderD128 -vf format=p010le,hwupload -c:v hevc_vaapi -qp 1
+ffmpeg version n8.0.1 Copyright (c) 2000-2025 the FFmpeg developers
+  built with gcc 15.2.1 (GCC) 20251112
+  configuration: --prefix=/usr --disable-debug --disable-static --disable-stripping --enable-amf --enable-avisynth --enable-cuda-llvm --enable-lto --enable-fontconfig --enable-frei0r --enable-gmp --enable-gnutls --enable-gpl --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libdav1d --enable-libdrm --enable-libdvdnav --enable-libdvdread --enable-libfreetype --enable-libfribidi --enable-libglslang --enable-libgsm --enable-libharfbuzz --enable-libiec61883 --enable-libjack --enable-libjxl --enable-libmodplug --enable-libmp3lame --enable-libopencore_amrnb --enable-libopencore_amrwb --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libplacebo --enable-libpulse --enable-librav1e --enable-librsvg --enable-librubberband --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libtheora --enable-libv4l2 --enable-libvidstab --enable-libvmaf --enable-libvorbis --enable-libvpl --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxcb --enable-libxml2 --enable-libxvid --enable-libzimg --enable-libzmq --enable-nvdec --enable-nvenc --enable-opencl --enable-opengl --enable-shared --enable-vapoursynth --enable-version3 --enable-vulkan
+  libavutil      60.  8.100 / 60.  8.100
+  libavcodec     62. 11.100 / 62. 11.100
+  libavformat    62.  3.100 / 62.  3.100
+  libavdevice    62.  1.100 / 62.  1.100
+  libavfilter    11.  4.100 / 11.  4.100
+  libswscale      9.  1.100 /  9.  1.100
+  libswresample   6.  1.100 /  6.  1.100
+ffmpeg stats and -progress period set to 10.
+Input #0, rawvideo, from 'fd:':
+  Duration: N/A, start: 0.000000, bitrate: 530841 kb/s
+  Stream #0:0: Video: rawvideo (Y3[11][10] / 0xA0B3359), yuv420p10le, 1280x720, 530841 kb/s, 24 tbr, 24 tbn
+Stream mapping:
+  Stream #0:0 -> #0:0 (rawvideo (native) -> hevc (hevc_vaapi))
+Output #0, matroska, to 'video1':
+  Metadata:
+    encoder         : Lavf62.3.100
+  Stream #0:0: Video: hevc (Main 10), vaapi(tv, progressive), 1280x720, q=2-31, 24 fps, 1k tbn
+    Metadata:
+      encoder         : Lavc62.11.100 hevc_vaapi
+[out#0/matroska @ 0x558db10e7680] video:1726010KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.007058%
+frame=14315 fps=207 q=-0.0 Lsize= 1726132KiB time=00:09:56.45 bitrate=23707.4kbits/s speed=8.62x elapsed=0:01:09.18
+
+5.) Merging files
+mkvmerge v96.0 ('It's My Life') 64-bit
+'video1': Using the demultiplexer for the format 'Matroska'.
+'audio0': Using the demultiplexer for the format 'Ogg/OGM'.
+'video1' track 0: Using the output module for the format 'HEVC/H.265'.
+'audio0' track 0: Using the output module for the format 'Opus'.
+The file 'output_stream' has been opened for writing.
+The cue entries (the index) are being written...
+Multiplexing took 7 seconds.
+
+* Resulting file size (without attachments): 1GB (1773507154 bytes)
+* Processing time: 0d 00h 02m 58s
+

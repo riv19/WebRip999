@@ -10,11 +10,12 @@
 [info] Writing video metadata as JSON to: BigBuckBunny [BigBuckBunny].info.json
 [ThumbnailsConvertor] There aren't any thumbnails to convert
 [download] Destination: BigBuckBunny [BigBuckBunny].mp4
-[download] 100% of  150.69MiB in 00:01:41 at 1.49MiB/s
+[download] 100% of  150.69MiB in 00:01:31 at 1.65MiB/s
 [VideoRemuxer] Remuxing video from mp4 to mkv; Destination: BigBuckBunny [BigBuckBunny].mkv
 Deleting original file BigBuckBunny [BigBuckBunny].mp4 (pass -k to keep)
 [Metadata] There isn't any metadata to add
 
+* Date/time: Sun Dec 14 05:05:24 PM CET 2025
 * Source file: "BigBuckBunny [BigBuckBunny].mkv"
 * File size: 150MB (158120900 bytes)
 
@@ -37,7 +38,7 @@ Source audio (id 0) stream info:
   "tag_duration": "00:09:56.474000000",
   "tag_handler_name": "(C) 2007 Google Inc. v08.13.2007.",
   "tag_vendor_id": "[0][0][0][0]",
-  "uid": 4472787122464429081
+  "uid": 1746564020431360181
 }
 Source video (id 1) stream info:
 {
@@ -60,7 +61,7 @@ Source video (id 1) stream info:
   "tag_duration": "00:09:56.459000000",
   "tag_handler_name": "(C) 2007 Google Inc. v08.13.2007.",
   "tag_vendor_id": "[0][0][0][0]",
-  "uid": 6287877350727736708
+  "uid": 3035921153253499916
 }
 Extracting track 0 with the CodecID 'A_AAC' to the file 'audio0'. Container format: raw AAC file with ADTS headers
 Progress: 100%
@@ -85,8 +86,8 @@ Encoding using libopus 1.5.2 (audio)
 Encoding complete
 -----------------------------------------------------
        Encoded: 9 minutes and 56.5 seconds
-       Runtime: 11 seconds
-                (54.23x realtime)
+       Runtime: 8 seconds
+                (74.56x realtime)
          Wrote: 5923341 bytes, 29825 packets, 599 pages
        Bitrate: 78.7918 kbit/s (without overhead)
  Instant rates: 1.2 to 160.8 kbit/s
@@ -126,34 +127,34 @@ Svt[info]: SVT [config]: AC Bias Strength 						: 4.00
 Svt[info]: SVT [config]: spy-rd 							: oui
 Svt[info]: -------------------------------------------
 Encoding      2000
-Average System Encoding Speed:        22.67
+Average System Encoding Speed:        30.58
      4000
-Average System Encoding Speed:        25.07
+Average System Encoding Speed:        34.44
      6000
-Average System Encoding Speed:        25.16
+Average System Encoding Speed:        34.98
      8000
-Average System Encoding Speed:        25.31
+Average System Encoding Speed:        35.05
     10000
-Average System Encoding Speed:        25.32
+Average System Encoding Speed:        35.07
     12000
-Average System Encoding Speed:        25.21
+Average System Encoding Speed:        34.97
     14000
-Average System Encoding Speed:        24.77
+Average System Encoding Speed:        34.26
     14315
 SUMMARY --------------------------------- Channel 1  --------------------------------
 Total Frames		Frame Rate		Byte Count		Bitrate
-       14315		24.00 fps		  98296378		1318.40 kbps
+       14315		24.00 fps		  98300310		1318.45 kbps
 
 
 Channel 1
-Average Speed:		24.997 fps
-Total Encoding Time:	572671 ms
-Total Execution Time:	573174 ms
-Average Latency:	5000 ms
-Max Latency:		9647 ms
+Average Speed:		34.560 fps
+Total Encoding Time:	414202 ms
+Total Execution Time:	414550 ms
+Average Latency:	3618 ms
+Max Latency:		7223 ms
 
 5.) Merging files
-mkvmerge v95.0 ('Goodbye Stranger') 64-bit
+mkvmerge v96.0 ('It's My Life') 64-bit
 'video1': Using the demultiplexer for the format 'IVF (AV1, VP8, VP9)'.
 'audio0': Using the demultiplexer for the format 'Ogg/OGM'.
 'video1' track 0: Using the output module for the format 'AV1'.
@@ -162,5 +163,6 @@ The file 'output_stream' has been opened for writing.
 The cue entries (the index) are being written...
 Multiplexing took 0 seconds.
 
-* Resulting file size (without attachments): 99MB (104304253 bytes)
+* Resulting file size (without attachments): 99MB (104308178 bytes)
+* Processing time: 0d 00h 08m 37s
 
