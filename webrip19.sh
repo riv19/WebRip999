@@ -384,9 +384,9 @@ process_video() {
 
             if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-                echo "Arguments: ${SVT_AV1_ARGS[@]}"
+                echo "Arguments: ${SVT_AV1_HDR_ARGS[@]}"
                 vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
-                    SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+                    SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin
 
             elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
@@ -405,9 +405,9 @@ process_video() {
 
             if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-                echo "Arguments: ${SVT_AV1_ARGS[@]}"
+                echo "Arguments: ${SVT_AV1_HDR_ARGS[@]}"
                 ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
-                    SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+                    SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin
 
             elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
@@ -438,11 +438,11 @@ process_video() {
             if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 local -n args="${VIDEO_ENCODER}_ARGS"
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-                echo "Arguments: ${SVT_AV1_ARGS[@]}"
+                echo "Arguments: ${SVT_AV1_HDR_ARGS[@]}"
                 mpv --no-audio --o=- --no-input-cursor --really-quiet \
                     --no-input-default-bindings --input-vo-keyboard=no \
                     $mpv_args --of=rawvideo "$track" | \
-                    SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin \
+                    SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin \
                         -w $width -h $height --input-depth $depth --fps $fps
 
             elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
@@ -466,10 +466,10 @@ process_video() {
 
             if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
-                echo "Arguments: ${SVT_AV1_ARGS[@]}"
+                echo "Arguments: ${SVT_AV1_HDR_ARGS[@]}"
                 mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
                     -really-quiet $mplayer_args "$track" | \
-                    SvtAv1EncApp "${SVT_AV1_ARGS[@]}" -b $(basename $track) -i stdin
+                    SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin
 
             elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
