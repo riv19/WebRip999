@@ -594,7 +594,7 @@ echo
 declare -a streams
 extract_m3u_paths "$PLAYLIST" streams
 
-OUTPUT_NUM=0
+OUTPUT_NUM=1
 STREAM_NUM=1
 STREAM_COUNT="${#streams[@]}"
 while [ 1 ]
