@@ -388,11 +388,11 @@ process_video() {
                 vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
                     SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin
 
-            elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
+            elif [[ "$VIDEO_ENCODER" == ffmpeg ]]; then
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
-                echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
+                echo "Arguments: ${FFMPEG_VENC_ARGS[@]}"
                 vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
-                    ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
+                    ffmpeg -i - "${FFMPEG_VENC_ARGS[@]}" -f matroska \
                         -stats_period 10 $(basename $track)
             fi
 
@@ -409,11 +409,11 @@ process_video() {
                 ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
                     SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin
 
-            elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
+            elif [[ "$VIDEO_ENCODER" == ffmpeg ]]; then
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
-                echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
+                echo "Arguments: ${FFMPEG_VENC_ARGS[@]}"
                 ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
-                    ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
+                    ffmpeg -i - "${FFMPEG_VENC_ARGS[@]}" -f matroska \
                     -stats_period 10 $(basename $track)
             fi
 
@@ -445,14 +445,14 @@ process_video() {
                     SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin \
                         -w $width -h $height --input-depth $depth --fps $fps
 
-            elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
+            elif [[ "$VIDEO_ENCODER" == ffmpeg ]]; then
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
-                echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
+                echo "Arguments: ${FFMPEG_VENC_ARGS[@]}"
                 mpv --no-audio --o=- --no-input-cursor --really-quiet \
                     --no-input-default-bindings --input-vo-keyboard=no \
                     $mpv_args --of=rawvideo "$track" | \
                     ffmpeg -f rawvideo -pix_fmt $pix_fmt -s ${width}:${height} \
-                        -r $fps -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
+                        -r $fps -i - "${FFMPEG_VENC_ARGS[@]}" -f matroska \
                         -stats_period 10 $(basename $track)
             fi
 
@@ -471,12 +471,12 @@ process_video() {
                     -really-quiet $mplayer_args "$track" | \
                     SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin
 
-            elif [[ "$VIDEO_ENCODER" == ffmpeg_vaapi ]]; then
+            elif [[ "$VIDEO_ENCODER" == ffmpeg ]]; then
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
-                echo "Arguments: ${FFMPEG_VAAPI_ARGS[@]}"
+                echo "Arguments: ${FFMPEG_VENC_ARGS[@]}"
                 mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
                     -really-quiet $mplayer_args "$track" | \
-                    ffmpeg -i - "${FFMPEG_VAAPI_ARGS[@]}" -f matroska \
+                    ffmpeg -i - "${FFMPEG_VENC_ARGS[@]}" -f matroska \
                         -stats_period 10 $(basename $track)
             fi
 
