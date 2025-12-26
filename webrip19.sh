@@ -21,14 +21,13 @@ halt() {
 
 # --- PREREQUISITES BEGIN
 
+which awk >/dev/null 2>&1 || halt "Please install \"awk\""
 which file >/dev/null 2>&1 || halt "Please install \"file\""
 which jq >/dev/null 2>&1 || halt "Please install \"jq\""
 which yt-dlp >/dev/null 2>&1 || halt "Please install \"yt-dlp\""
 which avifenc >/dev/null 2>&1 || halt "Please install \"libavif\""
 which SvtAv1EncApp >/dev/null 2>&1 || halt "Please install \"svt-av1\""
 which opusenc >/dev/null 2>&1 || halt "Please install \"opus-tools\""
-which mkvmerge >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
-which mkvpropedit >/dev/null 2>&1 || halt "Please install \"mkvtoolnix\""
 
 if [[ "$VIDEO_DECODER" == vspipe ]]; then
     which vspipe >/dev/null 2>&1 || halt "Please install \"vapoursynth\""
@@ -96,7 +95,7 @@ human_size_from_file() {
 
     while (( size >= 1024 && i < ${#units[@]}-1 )); do
         size=$(( size / 1024 ))
-        ((i++))
+        ((++i))
     done
 
     echo "${size}${units[$i]}"
@@ -110,44 +109,6 @@ app_ver_short() {
 
 app_ver() {
     echo $("$1" --version 2>/dev/null | head -n1)
-}
-
-get_sample_rate_from_file() {
-    local filepath="$1"
-    local info regex sr_hz sr_khz int_khz dec_khz hz
-
-    info=$(file "$filepath")
-
-    # Match "... 44100 Hz ..."
-    regex='s/.* \([0-9]\+\) Hz.*/\1/p'
-    sr_hz=$(echo "$info" | sed -n "$regex")
-    if [[ -n "$sr_hz" ]]; then
-        echo "$sr_hz"
-        return
-    fi
-
-    # Match "... 44.1 kHz ..." or "... 48 kHz ..."
-    regex='s/.* \([0-9.]\+\) kHz.*/\1/p'
-    sr_khz=$(echo "$info" | sed -n "$regex")
-    if [[ -n "$sr_khz" ]]; then
-        int_khz="${sr_khz%.*}"
-        dec_khz="${sr_khz#*.}"
-
-        if [[ "$int_khz" == "$dec_khz" ]]; then
-            # No decimal part: "48"
-            hz=$(( int_khz * 1000 ))
-        else
-            # Has decimal part: "44.1"
-            # decimal digit * 100 (only one decimal place expected from file)
-            hz=$(( int_khz * 1000 + dec_khz * 100 ))
-        fi
-
-        echo "$hz"
-        return
-    fi
-
-    # No match — echo empty
-    echo ""
 }
 
 calc_resolution() {
@@ -194,29 +155,29 @@ retrieve_stream_yt_dlp() {
     echo "* File size: $human_size ($size_bytes bytes)"
 }
 
-retrieve_stream_local() {
-    path="${line:7}"
-    filename="$(basename "$path")"
-    ln -s "$path" "$filename"
-    input_files=( "$filename" )
-    if [[ $(file -brL --mime-type "$filename") == "video/x-matroska" ]]
-    then
-        # Cover/thumbnail
-        json=$(mkvmerge "$filename" -J | \
-            jq '.attachments | map(select(.file_name | startswith("cover")))')
-        id=$(echo "$json" | jq -r .[0].id)
-        file_name=$(echo "$json" | jq -r .[0].file_name)
-        mkvextract attachments "$filename" "$id":"$file_name"
-        thumbnail_files=( "$file_name" )
-        # Description/annotation
-        json=$(mkvmerge "$filename" -J | \
-            jq '.attachments | map(select(.file_name == "description.txt"))')
-        id=$(echo "$json" | jq -r .[0].id)
-        file_name=$(echo "$json" | jq -r .[0].file_name)
-        mkvextract attachments "$filename" "$id":"$file_name.description"
-        desc_files=( "$file_name.description" )
-    fi
-}
+#retrieve_stream_local() {
+#    path="${line:7}"
+#    filename="$(basename "$path")"
+#    ln -s "$path" "$filename"
+#    input_files=( "$filename" )
+#    if [[ $(file -brL --mime-type "$filename") == "video/x-matroska" ]]
+#    then
+#        # Cover/thumbnail
+#        json=$(mkvmerge "$filename" -J | \
+#            jq '.attachments | map(select(.file_name | startswith("cover")))')
+#        id=$(echo "$json" | jq -r .[0].id)
+#        file_name=$(echo "$json" | jq -r .[0].file_name)
+#        mkvextract attachments "$filename" "$id":"$file_name"
+#        thumbnail_files=( "$file_name" )
+#        # Description/annotation
+#        json=$(mkvmerge "$filename" -J | \
+#            jq '.attachments | map(select(.file_name == "description.txt"))')
+#        id=$(echo "$json" | jq -r .[0].id)
+#        file_name=$(echo "$json" | jq -r .[0].file_name)
+#        mkvextract attachments "$filename" "$id":"$file_name.description"
+#        desc_files=( "$file_name.description" )
+#    fi
+#}
 
 extract_tracks() {
     echo "$STEP.) Extracting tracks"
@@ -227,31 +188,33 @@ extract_tracks() {
         ln -sL ../dl/*.description description
     fi
 
-    # This looks like not necessary, but some tools like ffmpeg-normalize can't
-    # read from stdin or can parse only certain container formats. Also it
-    # throws possible errors early, in case of corrupted source.
-    local source_info=$(mkvmerge -J input_stream)
+    # This step looks like not necessary, although some tools like
+    # ffmpeg-normalize can't read from stdin or can parse only certain container
+    # formats. Also it catches possible corrupted input files early.
+    local source_info=$(ffprobe -v error -print_format json -show_format \
+                        -show_streams input_stream)
     local -a tracks=()
     while IFS= read -r item; do
-        local type=$(echo "$item" | jq -r '.type')
-        local tid=$(echo "$item" | jq -r '.id')
+        local type=$(echo "$item" | jq -r '.codec_type')
+        local tid=$(echo "$item" | jq -r '.index')
         if [[ "$type" == "audio" ]]; then
             echo "Source audio (id $tid) stream info:"
-            echo "$(echo "$item" | jq -r '.properties')"
+            echo "$(echo "$item" | jq -r 'del(.disposition)')"
             tracks+=("$tid audio")
         elif [[ "$type" == "video" ]]; then
             echo "Source video (id $tid) stream info:"
-            echo "$(echo "$item" | jq -r '.properties')"
+            echo "$(echo "$item" | jq -r 'del(.disposition)')"
             tracks+=("$tid video")
         else
             echo "BUG: Unsupported track type: $type"
         fi
-    done < <(echo "$source_info" | jq -rc '.tracks[]')
+    done < <(echo "$source_info" | jq -rc '.streams[]')
 
     for track in "${tracks[@]}"; do
         local tid=$(echo "$track" | cut -d" " -f1)
         local type=$(echo "$track" | cut -d" " -f2)
-        mkvextract tracks input_stream $tid:$type$tid
+        ffmpeg -hide_banner -nostdin -loglevel quiet -i input_stream \
+               -map 0:"$tid" -c copy -f matroska "$type$tid"
     done
 
     echo "$source_info" > source_info
@@ -278,14 +241,19 @@ process_cover() {
 
 process_audio() {
     echo "$STEP.) Processing audio"
+    local ss_info=$(cat ../src/source_info)
 
     for track in ../src/audio*; do
+        local regex='s/.*audio\([0-9]*\)/\1/p'
+        local track_id=$(echo "$track" | sed -n "$regex")
+
         if [ $DRC -eq 1 ]; then
             echo "Applying DRC with ffmpeg-normalize v$(app_ver_short ffmpeg-normalize)"
             echo "Arguments: ${FFMPEG_NORMALIZE_ARGS[@]}"
-            local sample_rate=$(get_sample_rate_from_file "$track")
-            NO_COLOR=1 ffmpeg-normalize "$track" -ar $sample_rate -c:a flac -v \
-                "${FFMPEG_NORMALIZE_ARGS[@]}" -e="-sample_fmt s16" -o norm.flac
+            local jq_s=".streams[] | select(.index == $track_id) | .sample_rate"
+            local sample_rate=$(echo "$ss_info" | jq -r "$jq_s")
+            NO_COLOR=1 ffmpeg-normalize "$track" -ar $sample_rate -c:a flac \
+                -v "${FFMPEG_NORMALIZE_ARGS[@]}" -e="-sample_fmt s16" -o norm.flac
             mv -f norm.flac "$track"
         fi
 
@@ -317,8 +285,9 @@ process_audio() {
             if [[ "$AUDIO_ENCODER" == opusenc ]]; then
                 echo "Using encoder: opusenc v$(app_ver_short opusenc)"
                 echo "Arguments: ${OPUSENC_ARGS[@]}"
-                ffmpeg -loglevel quiet -i "$track" -f wav "${FFMPEG_AUDIO_ARGS[@]}" - | \
-                    opusenc "${OPUSENC_ARGS[@]}" --ignorelength - $(basename "$track")
+                ffmpeg -nostdin -loglevel quiet -i "$track" -f wav \
+                    "${FFMPEG_AUDIO_ARGS[@]}" - | opusenc "${OPUSENC_ARGS[@]}" \
+                    --ignorelength - $(basename "$track")
             fi
 
         elif [[ "$AUDIO_DECODER" == mpv ]]; then
@@ -357,12 +326,13 @@ process_video() {
         local regex='s/.*video\([0-9]*\)/\1/p'
         local track_id=$(echo "$track" | sed -n "$regex")
         local ss_info=$(cat ../src/source_info)
-        local jq_s=".tracks[] | select(.id == $track_id) | .properties.pixel_dimensions"
-        local resolution=$(echo "$ss_info" | jq -r "$jq_s")
-        local width=$(echo "$resolution" | cut -d'x' -f1)
-        local height=$(echo "$resolution" | cut -d'x' -f2)
-        local jq_s=".tracks[] | select(.id == $track_id) | .properties.default_duration"
-        local fps=$((1000000000 / $(echo "$ss_info" | jq -r "$jq_s")))
+        local jq_s=".streams[] | select(.index == $track_id) | .width"
+        local width=$(echo "$ss_info" | jq -r "$jq_s")
+        local jq_s=".streams[] | select(.index == $track_id) | .height"
+        local height=$(echo "$ss_info" | jq -r "$jq_s")
+        local jq_s=".streams[] | select(.index == $track_id) | .r_frame_rate"
+        local frame_rate=$(echo "$ss_info" | jq -r "$jq_s")
+        local fps=$(echo "$frame_rate" | awk -F/ '{print $1/$2}')
 
         if [[ "$VIDEO_ENCODER" == copy ]]; then
             echo "Skipping re-encoding: \"copy\" encoder specified"
@@ -370,7 +340,7 @@ process_video() {
             return
         fi
 
-        echo "Video track source resolution: $resolution"
+        echo "Video track source resolution: ${width}x${height}"
 
         if [[ "$VIDEO_DECODER" == vspipe ]]; then
             echo "Using decoder: vspipe v$(app_ver_short vspipe)"
@@ -392,8 +362,8 @@ process_video() {
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
                 echo "Arguments: ${FFMPEG_VENC_ARGS[@]}"
                 vspipe -c y4m "$TMPDIR/$VIDEO_VPY_TMP_FILE" - | \
-                    ffmpeg -i - "${FFMPEG_VENC_ARGS[@]}" -f matroska \
-                        -stats_period 10 $(basename $track)
+                    ffmpeg -hide_banner -nostdin -i - "${FFMPEG_VENC_ARGS[@]}" \
+                           -f matroska -stats_period 10 $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == ffmpeg ]]; then
@@ -406,15 +376,16 @@ process_video() {
             if [[ "$VIDEO_ENCODER" == svt_av1_hdr ]]; then
                 echo "Using encoder: SvtAv1EncApp v$(app_ver_short SvtAv1EncApp)"
                 echo "Arguments: ${SVT_AV1_HDR_ARGS[@]}"
-                ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
-                    SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}" -b $(basename $track) -i stdin
+                ffmpeg -nostdin -loglevel quiet -i "$track" $ffmpeg_args \
+                       -f yuv4mpegpipe - | SvtAv1EncApp "${SVT_AV1_HDR_ARGS[@]}"\
+                       -b $(basename $track) -i stdin
 
             elif [[ "$VIDEO_ENCODER" == ffmpeg ]]; then
                 echo "Using encoder: ffmpeg v$(app_ver_short ffmpeg)"
                 echo "Arguments: ${FFMPEG_VENC_ARGS[@]}"
-                ffmpeg -loglevel quiet -i "$track" $ffmpeg_args -f yuv4mpegpipe - | \
-                    ffmpeg -i - "${FFMPEG_VENC_ARGS[@]}" -f matroska \
-                    -stats_period 10 $(basename $track)
+                ffmpeg -nostdin -loglevel quiet -i "$track" $ffmpeg_args \
+                       -f yuv4mpegpipe - | ffmpeg -i - "${FFMPEG_VENC_ARGS[@]}" \
+                       -f matroska -stats_period 10 $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == mpv ]]; then
@@ -451,9 +422,10 @@ process_video() {
                 mpv --no-audio --o=- --no-input-cursor --really-quiet \
                     --no-input-default-bindings --input-vo-keyboard=no \
                     $mpv_args --of=rawvideo "$track" | \
-                    ffmpeg -f rawvideo -pix_fmt $pix_fmt -s ${width}:${height} \
-                        -r $fps -i - "${FFMPEG_VENC_ARGS[@]}" -f matroska \
-                        -stats_period 10 $(basename $track)
+                    ffmpeg -hide_banner -nostdin -f rawvideo -pix_fmt $pix_fmt \
+                           -s ${width}:${height} -r $fps -i - \
+                           "${FFMPEG_VENC_ARGS[@]}" -f matroska \
+                           -stats_period 10 $(basename $track)
             fi
 
         elif [[ "$VIDEO_DECODER" == mplayer ]]; then
@@ -476,8 +448,8 @@ process_video() {
                 echo "Arguments: ${FFMPEG_VENC_ARGS[@]}"
                 mplayer -ao null -vo yuv4mpeg:file=/dev/stdout -noconsolecontrols \
                     -really-quiet $mplayer_args "$track" | \
-                    ffmpeg -i - "${FFMPEG_VENC_ARGS[@]}" -f matroska \
-                        -stats_period 10 $(basename $track)
+                    ffmpeg -hide_banner -nostdin -i - "${FFMPEG_VENC_ARGS[@]}" \
+                           -f matroska -stats_period 10 $(basename $track)
             fi
 
         else
@@ -495,7 +467,24 @@ merge_files() {
     fi
 
     # Merge Matroska
-    mkvmerge -o output_stream video* audio*
+    local -a inputs=()
+    local -a maps=()
+    local idx=0
+    for f in video*; do
+        [[ -e "$f" ]] || continue
+        inputs+=( -i "$f" )
+        maps+=( -map "$idx:v:0" )
+        ((++idx))
+    done
+    for f in audio*; do
+        [[ -e "$f" ]] || continue
+        inputs+=( -i "$f" )
+        maps+=( -map "$idx:a:0" )
+        ((++idx))
+    done
+
+    ffmpeg -hide_banner -nostdin -loglevel error "${inputs[@]}" "${maps[@]}" \
+           -c copy -f matroska output_stream
 
     local size_bytes=$(size_bytes_from_file output_stream)
     local human_size=$(human_size_from_file output_stream)
@@ -521,7 +510,7 @@ process_one() {
         retrieve_stream_yt_dlp "$stream"
         echo
     elif [[ "$stream" == file://* ]]; then
-        retrieve_stream_local "$stream"
+        #retrieve_stream_local "$stream"
         echo
     else
         echo "Unsupported URL schema: $stream"
@@ -609,24 +598,32 @@ do
 done
 
 finalize_stream() {
-    local -a edit_args=()
+    local -a attach_args=()
+    local idx=0
     if [ -f cover ]; then
-        edit_args+=( --attachment-name cover.avif \
-                     --attachment-mime-type image/avif \
-                     --add-attachment cover )
+        attach_args+=( -attach cover -metadata:s:t:$idx \
+                        mimetype=image/avif,filename=cover.avif )
+        ((++idx))
     fi
     if [ -f description ]; then
-        edit_args+=( --attachment-name description.txt \
-                     --attachment-mime-type text/plain \
-                     --add-attachment description )
+        attach_args+=( -attach description -metadata:s:t:$idx \
+                        mimetype=text/plain,filename=description.txt )
+        ((++idx))
     fi
-    edit_args+=( --attachment-name "$LOG_FILE" \
-                 --attachment-mime-type text/x-log \
-                 --add-attachment "../$LOG_FILE" )
+    attach_args+=( -attach "../$LOG_FILE" -metadata:s:t:$idx \
+                    mimetype=text/x-log,filename="$LOG_FILE" )
+    ((++idx))
 
-    # Mux tracks into the container
-    mkvpropedit output_stream --add-track-statistics-tags \
-        "${MKVPROPEDIT_ARGS[@]}" "${edit_args[@]}"
+    echo "Adding attachments: ${attach_args[@]}"
+
+    # Unfortunately, ffmpeg does not support inline attachment as mkvmerge,
+    # only remuxing.
+    local prefix=$(printf "%04d\n" $OUTPUT_NUM)
+    local old_name=$(readlink ../src/input_stream)
+    local old_basename=$(basename "$old_name")
+    ffmpeg -hide_banner -nostdin -loglevel error -i output_stream \
+           -i ../src/input_stream -map 0 -map_chapters 1 -c copy \
+           "${attach_args[@]}" -f matroska "$OUT_DIR/$prefix# $old_basename"
 }
 
 main_loop() {
@@ -651,12 +648,6 @@ main_loop() {
 
         cd "$TMPDIR/dst"
         finalize_stream
-
-        # Move resulting file
-        local prefix=$(printf "%04d\n" $OUTPUT_NUM)
-        local old_name=$(readlink ../src/input_stream)
-        local old_basename=$(basename "$old_name")
-        mv output_stream "$OUT_DIR/$prefix# $old_basename"
 
         # Cleanup
         cd "$TMPDIR"
