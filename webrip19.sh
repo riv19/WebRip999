@@ -101,6 +101,31 @@ human_size_from_file() {
     echo "${size}${units[$i]}"
 }
 
+get_image_type() {
+  local sig ftyp regexp
+
+  # Read first 32 bytes (needed for ISO BMFF)
+  sig=$(dd if="$1" bs=1 count=32 2>/dev/null | od -An -tx1 | tr -d ' \n')
+
+  case "$sig" in
+    89504e470d0a1a0a*) echo "image/png png" ;;
+    ffd8ff*)           echo "image/jpeg jpg" ;;
+    474946383761*|474946383961*) echo "image/gif gif" ;;
+    424d*)             echo "image/bmp bmp" ;;
+    49492a00*|4d4d002a*) echo "image/tiff tiff" ;;
+    52494646*57454250*) echo "image/webp webp" ;;
+    *)
+      # ISO BMFF (AVIF / HEIC family)
+      regexp='s/.*66747970\([0-9a-f]\{8\}\).*/\1/p'
+      ftyp=$(printf '%s' "$sig" | sed -n "$regexp")
+      case "$ftyp" in
+        61766966|61766973) echo "image/avif avif" ;; # avif / avis
+        *) echo "application/octet-stream bin" ;;
+      esac
+      ;;
+  esac
+}
+
 app_ver_short() {
     local out
     out="$("$1" --version 2>/dev/null || "$1" -V 2>/dev/null || "$1" -v 2>/dev/null || "$1" -version 2>/dev/null)"
@@ -224,15 +249,13 @@ process_cover() {
     echo "$STEP.) Processing cover image"
 
     if [[ -f "../src/cover" ]]; then
-        # Avoid recompression if already in target format
-        if [[ $(file -brL --mime-type "../src/cover") != "image/avif" ]]
-        then
+        if [[ "$IMAGE_ENCODER" == copy ]]; then
+            echo "Copying image without encoding"
+            ln -s ../src/cover cover
+        elif [[ "$IMAGE_ENCODER" == avifenc ]]; then
             echo "Encoding image with avifenc v$(app_ver_short avifenc)"
             echo "Arguments: ${AVIFENC_ARGS[@]}"
-            avifenc "${AVIFENC_ARGS[@]}" "../src/cover" cover
-        else
-            echo "Skipping encoding: Already in required format"
-            ln -sL "../src/cover" cover
+            avifenc "${AVIFENC_ARGS[@]}" ../src/cover cover
         fi
     else
         echo "No cover image in source stream"
@@ -565,8 +588,7 @@ extract_m3u_paths() {
 
     # Check if playlist exists
     if [[ ! -f "$playlist" ]]; then
-        echo "Error: Playlist '$playlist' not found." >&2
-        exit 1
+        halt "Error: Playlist '$playlist' not found."
     fi
 
     # Read playlist line by line
@@ -600,9 +622,15 @@ done
 finalize_stream() {
     local -a attach_args=()
     local idx=0
+    local cover_type=$(get_image_type cover)
+    local cover_mime=$(echo "$cover_type" | cut -d' ' -f1)
+    local cover_ext=$(echo "$cover_type" | cut -d' ' -f2)
+    if [[ "$cover_ext" == bin ]]; then
+        halt "Unknown cover image format"
+    fi
     if [ -f cover ]; then
         attach_args+=( -attach cover -metadata:s:t:$idx \
-                        mimetype=image/avif,filename=cover.avif )
+                        mimetype="$cover_mime",filename=cover."$cover_ext" )
         ((++idx))
     fi
     if [ -f description ]; then
