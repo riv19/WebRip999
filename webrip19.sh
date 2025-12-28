@@ -85,8 +85,7 @@ size_bytes_from_file() {
 }
 
 human_size_from_file() {
-    local file="$1"
-    local size=$(size_bytes_from_file "$file")
+    local size="$1"
 
     local units=(B KB MB GB TB PB)
     local i=0
@@ -170,7 +169,7 @@ retrieve_stream_yt_dlp() {
 
     local input_stream=$(ls *.mkv)
     local size_bytes=$(size_bytes_from_file "$input_stream")
-    local human_size=$(human_size_from_file "$input_stream")
+    local human_size=$(human_size_from_file "$size_bytes")
 
     echo
     echo "* Date/time: $(date)"
@@ -479,45 +478,6 @@ process_video() {
     done
 }
 
-merge_files() {
-    echo "$STEP.) Merging files"
-
-    # Move remaining unprocessed files to destination dir
-    if [ -f ../src/description ]; then
-        ln -sL ../src/description
-    fi
-
-    # Merge Matroska
-    local -a inputs=()
-    local -a maps=()
-    local idx=0
-    for f in video*; do
-        [[ -e "$f" ]] || continue
-        inputs+=( -i "$f" )
-        maps+=( -map "$idx:v:0" )
-        ((++idx))
-    done
-    for f in audio*; do
-        [[ -e "$f" ]] || continue
-        inputs+=( -i "$f" )
-        maps+=( -map "$idx:a:0" )
-        ((++idx))
-    done
-
-    ffmpeg -hide_banner -nostdin -loglevel error "${inputs[@]}" "${maps[@]}" \
-           -c copy -f matroska output_stream
-
-    local size_bytes=$(size_bytes_from_file output_stream)
-    local human_size=$(human_size_from_file output_stream)
-
-    echo
-    echo "* Resulting file size (without attachments): $human_size ($size_bytes bytes)"
-
-    # Remove unnecessary files
-    rm -f ../src/audio*
-    rm -f ../src/video*
-}
-
 process_one() {
     local stream="$1"
     local start_seconds=$(date +%s)
@@ -566,10 +526,22 @@ process_one() {
     process_video
     echo
 
-    # Merge processed tracks and attachments
-    STEP=$((STEP + 1))
-    cd "$TMPDIR/dst"
-    merge_files
+    # Move remaining unprocessed files to destination dir
+    if [ -f ../src/description ]; then
+        mv -f ../src/description .
+    fi
+
+    local tot_size=0
+    for f in video* audio* cover description; do
+        [ -f "$f" ] || continue
+        ((tot_size += $(size_bytes_from_file "$f")))
+    done
+
+    # Remove unnecessary files
+    rm -f ../src/audio*
+    rm -f ../src/video*
+
+    echo "* Output data size: $(human_size_from_file $tot_size) ($tot_size bytes)"
 
     local end_seconds=$(date +%s)
     local elapsed=$((end_seconds - start_seconds))
@@ -622,30 +594,47 @@ STREAM_NUM=1
 STREAM_COUNT="${#streams[@]}"
 
 finalize_stream() {
+    # Prepare tracks mapping
+    local -a inputs=()
+    local -a maps=()
+    local track_idx=0
+    for f in video*; do
+        [[ -e "$f" ]] || continue
+        inputs+=( -i "$f" )
+        maps+=( -map "$track_idx:v:0" )
+        ((++track_idx))
+    done
+    for f in audio*; do
+        [[ -e "$f" ]] || continue
+        inputs+=( -i "$f" )
+        maps+=( -map "$track_idx:a:0" )
+        ((++track_idx))
+    done
+
+    # Prepare attachments mapping
     local -a attach_args=()
-    local idx=0
     local cover_type=$(get_image_type cover)
     local cover_mime=$(echo "$cover_type" | cut -d' ' -f1)
     local cover_ext=$(echo "$cover_type" | cut -d' ' -f2)
+    local attach_idx=0
     if [ -f cover ]; then
         if [[ "$cover_ext" == bin ]]; then
             halt "Unknown cover image format"
         fi
-        attach_args+=( -attach cover -metadata:s:t:$idx \
+        attach_args+=( -attach cover -metadata:s:t:$attach_idx \
                         mimetype="$cover_mime",filename=cover."$cover_ext" )
-        ((++idx))
+        ((++attach_idx))
     fi
     if [ -f description ]; then
-        attach_args+=( -attach description -metadata:s:t:$idx \
+        attach_args+=( -attach description -metadata:s:t:$attach_idx \
                         mimetype=text/plain,filename=description.txt )
-        ((++idx))
+        ((++attach_idx))
     fi
-    attach_args+=( -attach "../$LOG_FILE" -metadata:s:t:$idx \
+    attach_args+=( -attach "../$LOG_FILE" -metadata:s:t:$attach_idx \
                     mimetype=text/x-log,filename="$LOG_FILE" )
-    ((++idx))
+    ((++attach_idx))
 
-    echo "Adding attachments: ${attach_args[@]}"
-
+    # Prepare output file name
     local listing prefix
     local output_num=1
     if [ -z "$OUTPUT_DIR_SCHEMA" ]; then
@@ -663,21 +652,26 @@ finalize_stream() {
         fi
         break
     done
+
+    # Mux output file
     local old_name=$(readlink ../src/input_stream)
     local old_basename=$(basename "$old_name")
-    local out_file_path
+    local output_file_path
+    local -a mux_args=( "${inputs[@]}" -i ../src/input_stream "${maps[@]}" \
+                        -map_chapters $track_idx "${attach_args[@]}" )
+    echo "Using multiplexer: ffmpeg v$(app_ver_short ffmpeg)"
+    echo "Arguments: ${mux_args[@]}"
+
     if [ -z "$OUTPUT_DIR_SCHEMA" ]; then
         output_file_path=$(printf '%q' "$OUTPUT_DIR/$prefix# $old_basename" | \
             sed 's|\\~|~|g')
-        ffmpeg -hide_banner -nostdin -loglevel error -i output_stream \
-            -i ../src/input_stream -map 0 -map_chapters 1 -c copy \
-            "${attach_args[@]}" -f matroska "$(eval echo $out_file_path)"
+        ffmpeg -hide_banner -nostdin -loglevel error "${mux_args[@]}" -c copy \
+            -f matroska "$(eval echo $output_file_path)"
     elif [[ "$OUTPUT_DIR_SCHEMA" == "ssh" ]]; then
         output_file_path=$(printf '%q' \
             "$OUTPUT_DIR_PATH/$prefix# $old_basename" | sed 's|\\~|~|g')
-        ffmpeg -hide_banner -nostdin -loglevel error -i output_stream \
-            -i ../src/input_stream -map 0 -map_chapters 1 -c copy \
-            "${attach_args[@]}" -f matroska - | ssh "$OUTPUT_DIR_HOST" \
+        ffmpeg -hide_banner -nostdin -loglevel error "${mux_args[@]}" -c copy \
+            -f matroska - | ssh "$OUTPUT_DIR_HOST" \
                 "cat > \"\$(eval echo \"$output_file_path\")\""
     fi
 }
