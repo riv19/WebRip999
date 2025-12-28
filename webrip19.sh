@@ -514,6 +514,10 @@ merge_files() {
 
     echo
     echo "* Resulting file size (without attachments): $human_size ($size_bytes bytes)"
+
+    # Remove unnecessary files
+    rm -f ../src/audio*
+    rm -f ../src/video*
 }
 
 process_one() {
