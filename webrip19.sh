@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+SCRIPT_VERSION=2.0
+
 # See README.md for help.
 
 #
@@ -482,6 +484,8 @@ process_one() {
     local stream="$1"
     local start_seconds=$(date +%s)
 
+    echo "WebRip19 Batch Video Archiving tool v$SCRIPT_VERSION: $SCRIPT_URL"
+    echo
     echo "::: Processing stream $STREAM_NUM of $STREAM_COUNT: $stream"
     echo
 
@@ -573,8 +577,6 @@ extract_m3u_paths() {
     done < "$playlist"
 }
 
-echo "WebRip19 Batch Video Archiving tool: $SCRIPT_URL"
-echo
 
 REGEX_SCHEMA='s|^\([a-zA-Z][a-zA-Z0-9+.-]*\)://.*|\1|; t; d'
 REGEX_HOST='s|^[^:]*://||; s|/.*$||; s|;.*$||'
