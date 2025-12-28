@@ -627,10 +627,10 @@ finalize_stream() {
     local cover_type=$(get_image_type cover)
     local cover_mime=$(echo "$cover_type" | cut -d' ' -f1)
     local cover_ext=$(echo "$cover_type" | cut -d' ' -f2)
-    if [[ "$cover_ext" == bin ]]; then
-        halt "Unknown cover image format"
-    fi
     if [ -f cover ]; then
+        if [[ "$cover_ext" == bin ]]; then
+            halt "Unknown cover image format"
+        fi
         attach_args+=( -attach cover -metadata:s:t:$idx \
                         mimetype="$cover_mime",filename=cover."$cover_ext" )
         ((++idx))
