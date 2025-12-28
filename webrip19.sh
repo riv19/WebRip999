@@ -53,9 +53,7 @@ VIDEO_VPY_TMP_FILE=video.vpy
 # --- PREREQUISITES END
 
 CURR_DIR="$PWD"
-OUT_DIR="$HOME/Videos/WebRip19"
 mkdir -p "$TMPDIR"
-mkdir -p "$OUT_DIR"
 
 line=$(head -n 1 "$PLAYLIST")
 [[ "$line" == "#EXTM3U" ]] || halt "Missing #EXTM3U file header in playlist"
@@ -606,22 +604,22 @@ extract_m3u_paths() {
 echo "WebRip19 Batch Video Archiving tool: $SCRIPT_URL"
 echo
 
+REGEX_SCHEMA='s|^\([a-zA-Z][a-zA-Z0-9+.-]*\)://.*|\1|; t; d'
+REGEX_HOST='s|^[^:]*://||; s|/.*$||; s|;.*$||'
+REGEX_PATH1='s|^[^:]*://[^/]*||; s|;.*$||'
+REGEX_PATH2='s|.*;path=\([^;]*\).*|\1|; t; d'
+OUTPUT_DIR_SCHEMA=$(echo "$OUTPUT_DIR" | sed -e "$REGEX_SCHEMA")
+OUTPUT_DIR_HOST=$(echo "$OUTPUT_DIR" | sed -e "$REGEX_HOST")
+OUTPUT_DIR_PATH=$(echo "$OUTPUT_DIR" | sed -e "$REGEX_PATH2")
+if [ -z "$OUTPUT_DIR_PATH" ]; then
+    OUTPUT_DIR_PATH=$(echo "$OUTPUT_DIR" | sed -e "$REGEX_PATH1")
+fi
+
 declare -a streams
 extract_m3u_paths "$PLAYLIST" streams
 
-OUTPUT_NUM=1
 STREAM_NUM=1
 STREAM_COUNT="${#streams[@]}"
-while [ 1 ]
-do
-    prefix=$(printf "%04d\n" $OUTPUT_NUM)
-    if ls "$OUT_DIR/$prefix# "* >/dev/null 2>&1
-    then
-        OUTPUT_NUM=$((OUTPUT_NUM + 1))
-        continue
-    fi
-    break
-done
 
 finalize_stream() {
     local -a attach_args=()
@@ -648,14 +646,40 @@ finalize_stream() {
 
     echo "Adding attachments: ${attach_args[@]}"
 
-    # Unfortunately, ffmpeg does not support inline attachment as mkvmerge,
-    # only remuxing.
-    local prefix=$(printf "%04d\n" $OUTPUT_NUM)
+    local listing prefix
+    local output_num=1
+    if [ -z "$OUTPUT_DIR_SCHEMA" ]; then
+        mkdir -p "$OUTPUT_DIR"
+        listing=$(ls "$OUTPUT_DIR")
+    elif [[ "$OUTPUT_DIR_SCHEMA" == "ssh" ]]; then
+        listing=$(ssh "$OUTPUT_DIR_HOST" \
+                  "mkdir -p $OUTPUT_DIR_PATH && ls $OUTPUT_DIR_PATH" )
+    fi
+    while [ 1 ]; do
+        prefix=$(printf "%04d\n" $output_num)
+        if echo "$listing" | grep "^$prefix#" >/dev/null 2>&1; then
+            ((++output_num))
+            continue
+        fi
+        break
+    done
     local old_name=$(readlink ../src/input_stream)
     local old_basename=$(basename "$old_name")
-    ffmpeg -hide_banner -nostdin -loglevel error -i output_stream \
-           -i ../src/input_stream -map 0 -map_chapters 1 -c copy \
-           "${attach_args[@]}" -f matroska "$OUT_DIR/$prefix# $old_basename"
+    local out_file_path
+    if [ -z "$OUTPUT_DIR_SCHEMA" ]; then
+        output_file_path=$(printf '%q' "$OUTPUT_DIR/$prefix# $old_basename" | \
+            sed 's|\\~|~|g')
+        ffmpeg -hide_banner -nostdin -loglevel error -i output_stream \
+            -i ../src/input_stream -map 0 -map_chapters 1 -c copy \
+            "${attach_args[@]}" -f matroska "$(eval echo $out_file_path)"
+    elif [[ "$OUTPUT_DIR_SCHEMA" == "ssh" ]]; then
+        output_file_path=$(printf '%q' \
+            "$OUTPUT_DIR_PATH/$prefix# $old_basename" | sed 's|\\~|~|g')
+        ffmpeg -hide_banner -nostdin -loglevel error -i output_stream \
+            -i ../src/input_stream -map 0 -map_chapters 1 -c copy \
+            "${attach_args[@]}" -f matroska - | ssh "$OUTPUT_DIR_HOST" \
+                "cat > \"\$(eval echo \"$output_file_path\")\""
+    fi
 }
 
 main_loop() {
@@ -690,8 +714,6 @@ main_loop() {
         rm -f "$AUDIO_VPY_TMP_FILE"
         rm -f "$VIDEO_VPY_TMP_FILE"
 
-
-        OUTPUT_NUM=$((OUTPUT_NUM + 1))
         STREAM_NUM=$((STREAM_NUM + 1))
         echo
     done
