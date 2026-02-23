@@ -668,12 +668,12 @@ finalize_stream() {
         output_file_path=$(printf '%q' "$OUTPUT_DIR/$prefix# $old_basename" | \
             sed 's|\\~|~|g')
         ffmpeg -hide_banner -nostdin -loglevel error "${mux_args[@]}" -c copy \
-            -f matroska "$(eval echo $output_file_path)"
+            "${FFMPEG_MUX_ARGS[@]}" -f matroska "$(eval echo $output_file_path)"
     elif [[ "$OUTPUT_DIR_SCHEMA" == "ssh" ]]; then
         output_file_path=$(printf '%q' \
             "$OUTPUT_DIR_PATH/$prefix# $old_basename" | sed 's|\\~|~|g')
         ffmpeg -hide_banner -nostdin -loglevel error "${mux_args[@]}" -c copy \
-            -f matroska - | ssh "$OUTPUT_DIR_HOST" \
+            "${FFMPEG_MUX_ARGS[@]}" -f matroska - | ssh "$OUTPUT_DIR_HOST" \
                 "cat > \"\$(eval echo \"$output_file_path\")\""
     fi
 }
