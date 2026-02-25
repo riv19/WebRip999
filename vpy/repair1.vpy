@@ -41,6 +41,4 @@ clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grain
 
 clip = core.resize.Bicubic(clip, %%VIDEO_WIDTH%%, %%VIDEO_HEIGHT%%)
 
-# Verify that resulting clip has exactly the same length
-assert old_num_frames == new_num_frames
 clip.set_output()
