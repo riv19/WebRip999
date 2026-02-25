@@ -139,7 +139,7 @@ clip = core.std.Splice(clips, mismatch=False)
 # ----- Deblock, deband, etc.
 
 clip = core.deblock.Deblock(clip, quant=20, aoffset=0, boffset=0)
-clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grainc=0, opt=0)
+clip = core.neo_f3kdb.Deband(clip, range=15, y=64, cb=64, cr=64, grainy=0, grainc=0)
 
 # ----- Resize
 
